@@ -1,0 +1,34 @@
+services:
+  poker-bank:
+    build: .
+    restart: unless-stopped
+    environment:
+      # Shared access code for your group.
+      APP_PIN: ${APP_PIN:?Set APP_PIN in .env}
+      # Separate PIN for admins (manage players and logged games). Leave empty to disable admin mode.
+      ADMIN_PIN: ${ADMIN_PIN:-}
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+    volumes:
+      - poker-data:/data  # database + daily backups in /data/backups
+    ports:
+      - "127.0.0.1:3000:3000"  # only for checks on the server itself; the world goes through Caddy
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [poker-bank]
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  poker-data:
+  caddy-data:
+  caddy-config:

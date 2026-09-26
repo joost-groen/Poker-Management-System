@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "poker-bank",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["server/src/index.ts"],
+      "env": { "DB_FILE": "data/dev.db", "PORT": "3100", "APP_PIN": "1234", "ADMIN_PIN": "9999" },
+      "port": 3100
+    }
+  ]
+}
