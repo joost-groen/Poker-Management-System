@@ -35,23 +35,24 @@ npm run build && npm start
 
 ## Deploy
 
-Runs on any small Linux server with Docker (e.g. a Hetzner CX22, ~€4/month). Caddy in front gets HTTPS certificates automatically.
+Runs on any small Linux server with Docker (e.g. a Hetzner CX22, ~€4/month). It plugs into a [Traefik](https://traefik.io) instance already running on the server, which routes the domain to the app and handles HTTPS.
 
 1. **Server**: create an Ubuntu VPS, then on it:
    ```bash
    curl -fsSL https://get.docker.com | sh
    ```
-2. **Domain**: point an A record (e.g. `poker.example.com`) at the server's IP. Ports 80 and 443 must be open.
-3. **Code**: copy the project over (or `git clone` it from your own remote):
+2. **Traefik**: needs a Docker network the app can join (default `traefik`), an HTTPS entrypoint (default `websecure`) and a certificate resolver (default `letsencrypt`). If yours use other names, set `TRAEFIK_NETWORK`, `TRAEFIK_ENTRYPOINT` and `TRAEFIK_CERTRESOLVER` in `.env`. Redirecting HTTP to HTTPS is left to Traefik's own config.
+3. **Domain**: point an A record (e.g. `poker.example.com`) at the server's IP.
+4. **Code**: copy the project over (or `git clone` it from your own remote):
    ```bash
    rsync -av --exclude node_modules --exclude dist --exclude data --exclude ios ./ root@SERVER_IP:/opt/poker-bank/
    ```
-4. **Config and start**, on the server in `/opt/poker-bank`:
+5. **Config and start**, on the server in `/opt/poker-bank`:
    ```bash
    cp .env.example .env    # set DOMAIN, APP_PIN and ADMIN_PIN
    docker compose up -d --build
    ```
-5. Open `https://poker.example.com` on an iPhone → Share → **Add to Home Screen**. It opens full-screen, works like an app and starts even on bad Wi-Fi.
+6. Open `https://poker.example.com` on an iPhone → Share → **Add to Home Screen**. It opens full-screen, works like an app and starts even on bad Wi-Fi.
 
 Update later: copy the code again, then `docker compose up -d --build`. Home-screen apps pick up the new version on their next launch.
 
@@ -63,7 +64,8 @@ docker compose cp poker-bank:/data/backups ./backups
 
 | Env | Default | |
 | --- | --- | --- |
-| `DOMAIN` | `localhost` | Public hostname for Caddy / HTTPS. |
+| `DOMAIN` | required in compose | Public hostname Traefik routes to the app. |
+| `TRAEFIK_NETWORK` / `TRAEFIK_ENTRYPOINT` / `TRAEFIK_CERTRESOLVER` | `traefik` / `websecure` / `letsencrypt` | Names from your Traefik setup. |
 | `APP_PIN` | required in compose | Shared access code for your group, sent as `Authorization: Bearer <code>`. |
 | `ADMIN_PIN` | empty (admin off) | Admin code, sent the same way; also grants group access. Use a different, longer code. |
 | `PORT` | `3000` | |

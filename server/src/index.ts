@@ -30,7 +30,7 @@ const errors: ErrorRequestHandler = (err, _req, res, _next) => {
 
 const app = express();
 app.disable('x-powered-by');
-// Behind Caddy (Docker network) the client IP comes from X-Forwarded-For; needed for the PIN rate limit.
+// Behind Traefik (Docker network) the client IP comes from X-Forwarded-For; needed for the PIN rate limit.
 app.set('trust proxy', 'loopback, uniquelocal');
 app.use(express.json({ limit: '64kb' }));
 app.use('/api', cors, authenticate);
