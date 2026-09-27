@@ -11,24 +11,24 @@ services:
     volumes:
       - poker-data:/data  # database + daily backups in /data/backups
     ports:
-      - "127.0.0.1:3000:3000"  # only for checks on the server itself; the world goes through Caddy
+      - "127.0.0.1:3000:3000"  # only for checks on the server itself; the world goes through Traefik
+    networks: [traefik]
+    labels:
+      # Picked up by the Traefik instance already running on the server (it owns ports 80/443).
+      traefik.enable: "true"
+      traefik.docker.network: ${TRAEFIK_NETWORK:-traefik}
+      traefik.http.routers.poker-bank.rule: Host(`${DOMAIN:?Set DOMAIN in .env}`)
+      traefik.http.routers.poker-bank.entrypoints: ${TRAEFIK_ENTRYPOINT:-websecure}
+      traefik.http.routers.poker-bank.tls.certresolver: ${TRAEFIK_CERTRESOLVER:-letsencrypt}
+      traefik.http.routers.poker-bank.middlewares: poker-bank-hsts,poker-bank-compress
+      traefik.http.middlewares.poker-bank-hsts.headers.stsSeconds: "31536000"
+      traefik.http.middlewares.poker-bank-compress.compress: "true"
+      traefik.http.services.poker-bank.loadbalancer.server.port: "3000"
 
-  caddy:
-    image: caddy:2
-    restart: unless-stopped
-    depends_on: [poker-bank]
-    environment:
-      DOMAIN: ${DOMAIN:-localhost}
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
+networks:
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK:-traefik}
 
 volumes:
   poker-data:
-  caddy-data:
-  caddy-config:
