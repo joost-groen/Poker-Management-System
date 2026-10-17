@@ -25,7 +25,7 @@ const resultsStmt = db.prepare(`
   LEFT JOIN events e ON e.game_id = g.id AND e.player_id = gp.player_id
   WHERE g.status = 'closed' AND (:year IS NULL OR substr(g.started_at, 1, 4) = :year)
   GROUP BY g.id, gp.player_id
-  ORDER BY g.started_at DESC`);
+  ORDER BY g.started_at DESC, g.id DESC`);
 
 function results(year: string | null): (PlayerGame & { playerId: number; name: string; archived: boolean })[] {
   return (resultsStmt.all({ year }) as unknown as ResultRow[]).map((r) => ({

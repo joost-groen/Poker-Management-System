@@ -35,6 +35,11 @@ export function day(iso: string): string {
   return new Date(iso).toLocaleDateString(dict().locale, { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
+/** Compact date for chart axes: "4 Oct 26". */
+export function shortDay(iso: string): string {
+  return new Date(iso).toLocaleDateString(dict().locale, { day: 'numeric', month: 'short', year: '2-digit' });
+}
+
 export function fullDay(iso: string): string {
   return new Date(iso).toLocaleDateString(dict().locale, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 }

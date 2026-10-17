@@ -110,6 +110,11 @@ const en = {
     worst: 'Worst',
     outs: (n: number) => `${n} out`,
     archived: 'ARCHIVED',
+    balance: 'Balance',
+    balanceChart: 'Balance over time',
+    aboutBalance: 'About the balance',
+    infoBalance: 'Running total of all results, one point per closed game. Above zero: up overall. Drag across the chart to see each game.',
+    gameN: (i: number, n: number) => `Game ${i} of ${n}`,
   },
   connect: {
     server: 'Server',
@@ -314,6 +319,11 @@ const de: Dict = {
     worst: 'Schlechtestes',
     outs: (n: number) => `${n} ausgezahlt`,
     archived: 'ARCHIVIERT',
+    balance: 'Bilanz',
+    balanceChart: 'Bilanz im Verlauf',
+    aboutBalance: 'Über die Bilanz',
+    infoBalance: 'Laufende Summe aller Ergebnisse, ein Punkt pro abgeschlossenem Spiel. Über null: insgesamt im Plus. Über das Diagramm wischen, um jedes Spiel zu sehen.',
+    gameN: (i: number, n: number) => `Spiel ${i} von ${n}`,
   },
   connect: {
     server: 'Server',

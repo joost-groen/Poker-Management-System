@@ -4,7 +4,7 @@ import { test } from 'node:test';
 process.env.DB_FILE = ':memory:';
 const { db } = await import('../src/db.ts');
 const games = await import('../src/games.ts');
-const { ranking } = await import('../src/stats.ts');
+const { playerDetail, ranking } = await import('../src/stats.ts');
 const { settle } = await import('../src/settle.ts');
 
 const player = (name: string) => Number(db.prepare('INSERT INTO players (name) VALUES (?)').run(name).lastInsertRowid);
@@ -43,6 +43,18 @@ test('a full game: rebuys, cash-outs, settlement and ranking', () => {
 
   const r = ranking(null);
   assert.deepEqual(r.rows.map((x) => [x.name, x.net, x.wins]), [['Anna', 3500, 1], ['Chris', 2500, 0], ['Ben', -6000, 0]]);
+});
+
+test('player detail lists closed games newest first with results that add up to net', () => {
+  let g = games.createGame(1000, [anna, ben]);
+  g = games.closeGame(g.id, new Map([[anna, 500], [ben, 1500]]));
+  const later = games.closeGame(games.createGame(1000, [anna, ben]).id, new Map([[anna, 1800], [ben, 200]]));
+  // Same start time as the first game: the newer game still comes first.
+  db.prepare('UPDATE games SET started_at = (SELECT started_at FROM games WHERE id = ?) WHERE id = ?').run(g.id, later.id);
+
+  const d = playerDetail(anna);
+  assert.deepEqual(d.games.slice(0, 2).map((x) => [x.gameId, x.result]), [[later.id, 800], [g.id, -500]]);
+  assert.equal(d.games.reduce((s, x) => s + x.result, 0), d.stats!.net);
 });
 
 test('late join is undone completely', () => {
