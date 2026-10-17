@@ -9,6 +9,7 @@ Mobile-first bookkeeping for home poker games: buy-ins, rebuys, cash-outs, end-o
 - **Cash out**: hand back `x` in chips to lower your debt by `x`. Only possible while you still have debt — profit can't leave the table before the end. At debt €0 you play on pure profit.
 - **Settle**: count every final stack. They must add up to what is on the table (buy-ins − cash-outs). Result = final stack − debt; the app lists the fewest payments that square everyone.
 - **Ranking**: sum of results over all closed games, filterable per year.
+- **Player page**: stats plus a balance chart: the running total of a player's results, one point per closed game. Drag across it (or use the arrow keys) to see the date, result and balance of each game.
 
 ## Roles and languages
 

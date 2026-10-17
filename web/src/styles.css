@@ -248,6 +248,17 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
 .chart-dot { fill: var(--text); stroke: var(--bg); stroke-width: 2; }
 .chart-value { fill: var(--text); font: 500 14px var(--mono); }
 .chart-cross { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; }
+.chart-zero { stroke: var(--muted); stroke-width: 1; }
+.chart-area-pos { fill: rgb(107 213 154 / 0.14); }
+.chart-area-neg { fill: rgb(255 148 102 / 0.14); }
+.chart-point { fill: var(--text); }
+
+/* Balance chart on the player page */
+.balance { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.balance-readout { display: flex; align-items: flex-end; gap: 12px; min-height: 44px; }
+.balance-value { font-size: 22px; font-weight: 500; }
+.balance .chart { flex: none; height: 200px; min-height: 0; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.balance svg { cursor: crosshair; }
 .chart-tip {
   position: absolute; pointer-events: none; display: flex; flex-direction: column; gap: 2px;
   padding: 8px 10px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line); font-size: 13px;
@@ -284,6 +295,7 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
   .game-grid > :not(.players-section) { grid-column: 2; }
 
   .stats-2 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .balance .chart { height: 280px; }
   .list-row:hover, .rank-row:hover { background: rgb(237 238 233 / 0.03); }
 }
 

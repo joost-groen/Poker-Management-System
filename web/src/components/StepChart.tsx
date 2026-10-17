@@ -20,7 +20,7 @@ interface Props {
 const PAD = { top: 12, right: 64, bottom: 28, left: 56 };
 
 /** Largest "nice" step (1, 2, 2.5, 5 × 10^k) giving about `count` gridlines. */
-function niceStep(max: number, count: number): number {
+export function niceStep(max: number, count: number): number {
   const raw = Math.max(max / count, 1);
   const pow = 10 ** Math.floor(Math.log10(raw));
   return ([1, 2, 2.5, 5, 10].map((m) => m * pow).find((s) => s >= raw) ?? 10 * pow);

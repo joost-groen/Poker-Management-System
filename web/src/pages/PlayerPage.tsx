@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import type { Player, PlayerDetail } from '../../../shared/types.ts';
 import { api, errorText, useAdmin } from '../api.ts';
+import { BalanceChart } from '../components/BalanceChart.tsx';
 import { Info } from '../components/Info.tsx';
 import { Pencil } from '../components/Icons.tsx';
 import { ErrorLine, Header, Loading, TabBar } from '../components/Layout.tsx';
@@ -64,6 +65,16 @@ export function PlayerPage({ id }: { id: number }) {
               <Stat label={t.player.best} value={s ? signed(s.best) : '–'} />
               <Stat label={t.player.worst} value={s ? signed(s.worst) : '–'} />
             </div>
+
+            {data.games.length > 0 && (
+              <section>
+                <h2 className="label">
+                  {t.player.balanceChart}
+                  <Info label={t.player.aboutBalance}>{t.player.infoBalance}</Info>
+                </h2>
+                <BalanceChart games={data.games} />
+              </section>
+            )}
 
             {data.games.length > 0 && (
               <section>
