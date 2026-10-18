@@ -18,6 +18,29 @@ Mobile-first bookkeeping for home poker games: buy-ins, rebuys, cash-outs, end-o
 - **Desktop and TV**: from 1024 px wide the app switches to a sidebar layout with wider, two-column screens. **TV mode** (`#/tv`, in the sidebar or the game's header) is a full-screen view of the current game for a TV or second screen: debts, total on the table, recent actions, a chart of chips on the table over time and the all-time top 5. It refreshes by itself, keeps the screen awake and hides the cursor. `#/tv/<id>` pins one game.
 - **Language**: English and German (Settings), defaulting to the device language. Server errors carry a `code` that the app translates; all texts live in [web/src/i18n.ts](web/src/i18n.ts).
 
+## Play: online poker
+
+A separate section (**Play** in the tab bar, `#/online`) for No-Limit Texas Hold'em. It has its own look, navigation, accounts, database file and stats, and never reads or writes Poker Bank's games, players or ranking.
+
+- **Practice**: play against bots, with 2 to 6 players at the table and stacks of 50, 100 or 200 big blinds. You only get the game, no hints. There are three levels: **Beginner** (loose and passive), **Regular** (solid, tight-aggressive) and **Shark** (plays by position, sizes bets by equity, semi-bluffs and bluffs). Bot games run entirely in the browser; their record (hands and result in big blinds per level) is stored on the device only.
+- **Learn**: the same games, plus a coach. On every decision it shows:
+  - your win chance (Monte Carlo equity against the hands still in) and the pot odds;
+  - your outs, with the rule of 2 and 4;
+  - your position and your starting hand's group;
+  - a suggested action, with the reason for it.
+
+  After each action you get feedback (good, okay or mistake, with the numbers behind it). After each hand there is a review. Recurring leaks, such as calling without the odds or folding when checking is free, are collected on your profile.
+- **At the table**: every step is played out on screen: bots take a moment to think (longer for a raise than a fold), bets slide in and are swept into the pot, each street is dealt after a short pause, an all-in turns the hands up and runs the board out card by card, and the pot goes to the winner. Live tables are replayed the same way, and the server waits for the replay before dealing on. Table sounds (cards, chips, check, fold, your turn, a win) are synthesised in the browser; the speaker button mutes them on that device. Poker terms (Flop, River, High card, Full house …) stay English in German too.
+- **Friends**: live tables for 2 to 9 players.
+  - **Joining**: the host picks blinds, the buy-in and the number of seats. Friends join with the 6-character code or the shared link `#/online/t/CODE`.
+  - **During play**: everyone acts from their own phone, with a 30-second clock; two timeouts in a row sit you out. Rebuy (one more buy-in, between hands, while your stack is below the buy-in), sit out or stand up at any time.
+  - **Ending**: when the host ends the table, everyone is cashed out. The result screen shows who pays whom.
+  - **Table types**: **Cash** tables are in euro and count in the online leaderboard (net, tables, hands, VPIP, weekly). **Fun** tables use play chips and are never counted.
+  - **No money moves through the app**: like Poker Bank, it only keeps the books.
+- **Accounts**: username, password (scrypt-hashed) and an emoji avatar. Accounts sit behind the same group code as the rest of the API; the session travels in an `X-Online-Session` header. Failed logins are rate-limited (10 per 15 minutes per IP).
+- **Separate data**: everything is stored in `online.db`, next to `poker.db` (`/data/online.db` in Docker, inside the same volume). The server refuses to start if `ONLINE_DB_FILE` points at Poker Bank's database. Backups go to the same folder as `online-YYYY-MM-DD.db` and are pruned separately. Live tables run in memory and save stacks between hands, so a restart voids at most the hand that was running.
+- **Live updates**: each player gets their own Server-Sent Events stream with only their own hole cards (`GET /api/online/tables/:code/stream`). There is no extra dependency, and it works through Traefik.
+
 ## Run
 
 Requires Node 24+ (uses the built-in `node:sqlite` and native TypeScript support, so the server has no build step).
@@ -72,6 +95,8 @@ docker compose cp poker-bank:/data/backups ./backups
 | `PORT` | `3000` | |
 | `DB_FILE` | `data/poker.db` (`/data/poker.db` in Docker) | SQLite file. |
 | `BACKUP_DIR` / `BACKUP_KEEP` | `<db dir>/backups` / `30` | Daily backups; `BACKUP_KEEP=0` turns them off. |
+| `ONLINE_DB_FILE` | `online.db` next to `DB_FILE` | Database of the online section (accounts, tables, hands). Must differ from `DB_FILE`. |
+| `ONLINE_ACTION_MS` / `ONLINE_NEXT_HAND_MS` | `30000` / `4000` | Time per decision at live tables, and the pause between hands. |
 | `CORS_ORIGIN` | `*` | Origins allowed to call the API. |
 
 ## API
@@ -97,6 +122,22 @@ All amounts are integer cents. Types: [shared/types.ts](shared/types.ts). Errors
 | DELETE 🔒 | `/api/games/:id/log/:entryId` · `/api/games/:id/players/:playerId` | – |
 | GET | `/api/ranking?year=2026` | – |
 
+Online section, under `/api/online` (types: [shared/online.ts](shared/online.ts); amounts are cents at cash tables, chips at fun tables). Everything except register and login needs `X-Online-Session: <token>`.
+
+| Method | Path | Body |
+| --- | --- | --- |
+| POST | `/register` · `/login` | `{ username, password, avatar }` · `{ username, password }` → `{ token, account }` |
+| POST | `/logout` | – |
+| GET / PATCH | `/me` | – / `{ avatar }` |
+| GET / POST | `/tables` | `{ name, mode: "cash" \| "fun", sb, bb, buyIn, maxSeats }` |
+| GET | `/tables/:code` · `/tables/:code/view` | – → summary (+ results once closed) · your live view |
+| GET | `/tables/:code/stream` | – → Server-Sent Events, one live view per change |
+| POST | `/tables/:code/join` | `{ seat? }` |
+| POST | `/tables/:code/action` | `{ type: "fold" \| "check" \| "call" \| "raise", to? }` |
+| POST | `/tables/:code/sit` | `{ out: boolean }` |
+| POST | `/tables/:code/start` · `/rebuy` · `/leave` · `/close` | – (start and close: host only) |
+| GET | `/stats` · `/stats/:accountId` | – → leaderboard · one player's cash tables |
+
 ## Native iPhone app (optional)
 
 Not needed: the home-screen web app covers it. Kept for later (push notifications, App Store). The iOS app is the same web client wrapped with [Capacitor](https://capacitorjs.com) (`ios/`). On first launch it asks for the server address and access code, so one build works with any server.
@@ -116,10 +157,13 @@ To hand it to your group via TestFlight (needs an Apple Developer account):
 ## Layout
 
 ```
-server/src   Express API + SQLite (games.ts holds the game rules)
-shared       API types used by server and clients
-web/src      React client (pages/, components/Info.tsx for the "i" tooltips)
+server/src         Express API + SQLite (games.ts holds the game rules)
+server/src/online  Online poker: accounts, live tables, stream, stats (own online.db)
+shared             API types used by server and clients
+shared/poker       Hold'em engine shared by server and browser: evaluator, betting rules, equity, bots, coach
+web/src            React client (pages/, components/Info.tsx for the "i" tooltips)
+web/src/online     The Play section, loaded on first visit
 ios          Capacitor iOS project (generated; web assets copied in by `cap sync`)
 ```
 
-`npm test` runs the rule tests, `npm run typecheck` checks everything.
+`npm test` runs the rule tests (including the poker engine, bots and online tables), `npm run typecheck` checks everything.

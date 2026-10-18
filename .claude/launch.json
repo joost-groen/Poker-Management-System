@@ -7,6 +7,19 @@
       "runtimeArgs": ["server/src/index.ts"],
       "env": { "DB_FILE": "data/dev.db", "PORT": "3100", "APP_PIN": "1234", "ADMIN_PIN": "9999" },
       "port": 3100
+    },
+    {
+      "name": "api-dev",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["--watch", "server/src/index.ts"],
+      "env": { "DB_FILE": "data/dev.db", "PORT": "3000", "APP_PIN": "1234", "ADMIN_PIN": "9999" },
+      "port": 3000
+    },
+    {
+      "name": "web-dev",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite"],
+      "port": 5173
     }
   ]
 }

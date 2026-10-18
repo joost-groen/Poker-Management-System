@@ -5,6 +5,7 @@ import type { ApiErrorBody, Meta } from '../../shared/types.ts';
 import { ADMIN_PIN, GROUP_PIN, authenticate } from './auth.ts';
 import { scheduleBackups } from './backup.ts';
 import { HttpError } from './http.ts';
+import { online, startOnline } from './online/index.ts';
 import { api } from './routes.ts';
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -14,7 +15,7 @@ const WEB_DIR = fileURLToPath(new URL('../../dist', import.meta.url));
 // Native apps (Capacitor etc.) call the API from another origin; auth is a bearer token, not cookies.
 const cors: RequestHandler = (req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', CORS_ORIGIN);
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Online-Session');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
   if (req.method === 'OPTIONS') return void res.status(204).end();
   next();
@@ -35,6 +36,8 @@ app.set('trust proxy', 'loopback, uniquelocal');
 app.use(express.json({ limit: '64kb' }));
 app.use('/api', cors, authenticate);
 app.get('/api/meta', (_req, res) => void res.json({ auth: Boolean(GROUP_PIN), admin: Boolean(ADMIN_PIN) } satisfies Meta));
+// Online poker: behind the same group code, with its own accounts and its own database file.
+app.use('/api/online', online);
 app.use('/api', api);
 app.use('/api', (_req, res) => void res.status(404).json({ error: 'Not found', code: 'not_found' } satisfies ApiErrorBody));
 if (existsSync(WEB_DIR)) {
@@ -49,3 +52,4 @@ app.use(errors);
 
 app.listen(PORT, () => console.log(`Poker Bank on http://localhost:${PORT}`));
 scheduleBackups();
+startOnline();

@@ -9,7 +9,9 @@ export type Route =
   | { name: 'ranking' }
   | { name: 'settings' }
   | { name: 'tv'; id: number | null }
-  | { name: 'player'; id: number };
+  | { name: 'player'; id: number }
+  /** The online poker section routes the rest of the path itself. */
+  | { name: 'online'; path: string[] };
 
 function parse(hash: string): Route {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean);
@@ -28,6 +30,9 @@ function parse(hash: string): Route {
       break;
     case 'player':
       if (id) return { name: 'player', id };
+      break;
+    case 'online':
+      return { name: 'online', path: parts.slice(1) };
   }
   return { name: 'games' };
 }

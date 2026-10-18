@@ -56,6 +56,9 @@ export const Screen = ({ size = 22 }) => (
 export const Expand = ({ size = 20 }) => (
   <svg {...base(size)} strokeWidth={2}><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
 );
+export const Spade = ({ size = 22 }) => (
+  <svg {...base(size)} strokeWidth={1.8}><path d="M12 3c-3 4-7 6.5-7 10a4 4 0 0 0 7 2.6A4 4 0 0 0 19 13c0-3.5-4-6-7-10z" /><path d="M12 15.5L10 21h4l-2-5.5" /></svg>
+);
 export const Close = ({ size = 20 }) => (
   <svg {...base(size)} strokeWidth={2}><path d="M6 6l12 12M18 6L6 18" /></svg>
 );
