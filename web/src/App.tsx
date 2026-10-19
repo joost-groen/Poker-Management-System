@@ -1,8 +1,8 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { lazy, Suspense, useEffect, useState, type FormEvent } from 'react';
 import type { Meta } from '../../shared/types.ts';
 import { api, errorText, getPin, getServer, isNative, needsServer, onDisconnected, setPin, setServer } from './api.ts';
 import { Info } from './components/Info.tsx';
-import { ErrorLine } from './components/Layout.tsx';
+import { ErrorLine, Loading } from './components/Layout.tsx';
 import { useT } from './i18n.ts';
 import { Game } from './pages/Game.tsx';
 import { Games } from './pages/Games.tsx';
@@ -13,6 +13,9 @@ import { Settings } from './pages/Settings.tsx';
 import { Settle } from './pages/Settle.tsx';
 import { Tv } from './pages/Tv.tsx';
 import { useRoute } from './router.ts';
+
+// Loaded on first visit, so Poker Bank itself stays as small and fast as before.
+const Online = lazy(() => import('./online/OnlineApp.tsx'));
 
 export function App() {
   // 'required': no server or a rejected code; 'optional': opened from Settings, so it can be cancelled.
@@ -42,6 +45,12 @@ export function App() {
       return <Tv key={route.id ?? 'current'} id={route.id} />;
     case 'player':
       return <PlayerPage key={route.id} id={route.id} />;
+    case 'online':
+      return (
+        <Suspense fallback={<main className="page"><Loading /></main>}>
+          <Online path={route.path} />
+        </Suspense>
+      );
     default:
       return <Games />;
   }

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
-import { useT } from '../i18n.ts';
-import { Back, Bars, Cards, Gear, Screen } from './Icons.tsx';
+import { useLang, useT } from '../i18n.ts';
+import { PLAY_LABEL } from '../online/label.ts';
+import { Back, Bars, Cards, Gear, Screen, Spade } from './Icons.tsx';
 
 export function Header({ title, back, children }: { title: ReactNode; back?: string; children?: ReactNode }) {
   const t = useT();
@@ -17,9 +18,10 @@ export function Header({ title, back, children }: { title: ReactNode; back?: str
   );
 }
 
-/** Bottom tab bar on phones; a sidebar with the brand and TV mode on desktop. */
+/** Bottom tab bar on phones; a sidebar with the brand and TV mode on desktop. "Play" opens the online section. */
 export function TabBar({ active }: { active: 'games' | 'ranking' | 'settings' }) {
   const t = useT();
+  const lang = useLang();
   const tab = (key: typeof active, href: string, icon: ReactNode, label: string) => (
     <a href={href} aria-current={active === key ? 'page' : undefined}>
       {icon}
@@ -27,10 +29,14 @@ export function TabBar({ active }: { active: 'games' | 'ranking' | 'settings' })
     </a>
   );
   return (
-    <nav className="tabbar" aria-label={t.nav.sections}>
+    <nav className="tabbar" aria-label={t.nav.sections} style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}>
       <span className="brand">Poker Bank</span>
       {tab('games', '#/', <Cards />, t.nav.games)}
       {tab('ranking', '#/ranking', <Bars />, t.nav.ranking)}
+      <a href="#/online">
+        <Spade />
+        {PLAY_LABEL[lang]}
+      </a>
       {tab('settings', '#/settings', <Gear />, t.nav.settings)}
       <a className="tv-link" href="#/tv">
         <Screen />

@@ -8,6 +8,8 @@ import { dict } from './i18n.ts';
 const SERVER_KEY = 'poker-bank-server';
 const PIN_KEY = 'poker-bank-pin';
 const ADMIN_KEY = 'poker-bank-admin';
+/** The Play section's session (see online/api.ts): a Play admin gets admin mode here too. */
+const ONLINE_SESSION_KEY = 'poker-online-session';
 
 export class ApiError extends Error {
   status: number;
@@ -86,8 +88,27 @@ export function setPin(value: string) {
   write(PIN_KEY, value);
 }
 
+function onlineSession(): { token: string; account: { username: string; admin?: boolean } } | null {
+  try {
+    return JSON.parse(read(ONLINE_SESSION_KEY) || 'null');
+  } catch {
+    return null;
+  }
+}
+
+/** Signed in to Play as an admin: admin mode without the PIN. */
+export function onlineAdminName(): string | null {
+  const s = onlineSession();
+  return s?.account.admin ? s.account.username : null;
+}
+
 export function isAdmin() {
-  return adminPin !== '';
+  return adminPin !== '' || onlineAdminName() !== null;
+}
+
+/** The Play section calls this when its session changes. */
+export function notifyAdminChange() {
+  adminListeners.forEach((fn) => fn());
 }
 
 function setAdminPin(value: string) {
@@ -119,6 +140,33 @@ export function needsServer() {
   return isNative && !server;
 }
 
+/** Admins: both databases as one .tar.gz, saved through the browser. */
+export async function downloadBackup(): Promise<void> {
+  const session = onlineSession()?.token;
+  let res: Response;
+  try {
+    res = await fetch(`${server}/api/admin/backup`, {
+      headers: { Authorization: `Bearer ${adminPin || pin}`, ...(session && { 'X-Online-Session': session }) },
+      cache: 'no-store',
+    });
+  } catch {
+    throw new ApiError(0, 'unreachable', 'Server not reachable');
+  }
+  if (!res.ok) {
+    const err = (await res.json().catch(() => null)) as ApiErrorBody | null;
+    throw new ApiError(res.status, err?.code ?? 'server_error', err?.error ?? res.statusText, err?.params);
+  }
+  const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? 'poker-bank-backup.tar.gz';
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
 /** Opens the Connect screen (Settings → change server or access code). */
 export function showConnect() {
   disconnectListeners.forEach((fn) => fn(true));
@@ -138,6 +186,7 @@ async function request<T>(path: string, method: string, body: unknown, token: st
       headers: {
         ...(body !== undefined && { 'Content-Type': 'application/json' }),
         ...(token && { Authorization: `Bearer ${token}` }),
+        ...(onlineSession()?.token && { 'X-Online-Session': onlineSession()!.token }),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
     });

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import type { Meta, Player } from '../../../shared/types.ts';
-import { api, errorText, isNative, lockAdmin, showConnect, unlockAdmin, useAdmin } from '../api.ts';
+import { api, errorText, isNative, lockAdmin, onlineAdminName, showConnect, unlockAdmin, useAdmin } from '../api.ts';
+import { BackupButton } from '../components/BackupButton.tsx';
 import { Info } from '../components/Info.tsx';
 import { Pencil, Restore, Trash } from '../components/Icons.tsx';
 import { ErrorLine, Header, TabBar } from '../components/Layout.tsx';
@@ -44,9 +45,10 @@ export function Settings() {
           ) : admin ? (
             <>
               <div className="check ok">
-                <span className="grow">{t.settings.adminOn}</span>
-                <button className="secondary small-btn" type="button" onClick={lockAdmin}>{t.settings.lock}</button>
+                <span className="grow">{onlineAdminName() ? t.settings.adminVia(onlineAdminName()!) : t.settings.adminOn}</span>
+                {!onlineAdminName() && <button className="secondary small-btn" type="button" onClick={lockAdmin}>{t.settings.lock}</button>}
               </div>
+              <BackupButton className="secondary" />
               <ManagePlayers />
             </>
           ) : (

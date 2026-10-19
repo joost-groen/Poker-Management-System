@@ -7,6 +7,10 @@ services:
       APP_PIN: ${APP_PIN:?Set APP_PIN in .env}
       # Separate PIN for admins (manage players and logged games). Leave empty to disable admin mode.
       ADMIN_PIN: ${ADMIN_PIN:-}
+      # Play: code needed to create an account. Leave empty to close registration.
+      ONLINE_INVITE_CODE: ${ONLINE_INVITE_CODE:-}
+      # Play: code to register as an administrator (manages accounts, all tables and Poker Bank). Leave empty to disable.
+      ONLINE_ADMIN_CODE: ${ONLINE_ADMIN_CODE:-}
       CORS_ORIGIN: ${CORS_ORIGIN:-*}
     volumes:
       - poker-data:/data  # database + daily backups in /data/backups

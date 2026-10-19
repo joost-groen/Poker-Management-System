@@ -20,6 +20,13 @@ declare module 'express-serve-static-core' {
   }
 }
 
+/** Set by the online section: a signed-in Play admin is a Poker Bank admin too, without the PIN. */
+let adminSession: (token: string) => boolean = () => false;
+
+export function allowAdminSessions(check: (token: string) => boolean) {
+  adminSession = check;
+}
+
 function same(a: string, b: string): boolean {
   const x = Buffer.from(a);
   const y = Buffer.from(b);
@@ -52,7 +59,7 @@ export const authenticate: RequestHandler = (req, _res, next) => {
   if (limited(ip)) throw new HttpError(429, 'too_many_attempts', 'Too many wrong codes, try again later');
 
   if (ADMIN_PIN && token && same(token, ADMIN_PIN)) req.role = 'admin';
-  else if (!GROUP_PIN || same(token, GROUP_PIN)) req.role = 'member';
+  else if (!GROUP_PIN || same(token, GROUP_PIN)) req.role = adminSession(req.get('x-online-session') ?? '') ? 'admin' : 'member';
   else {
     fail(ip, token);
     throw new HttpError(401, 'wrong_pin', 'Wrong access code');
