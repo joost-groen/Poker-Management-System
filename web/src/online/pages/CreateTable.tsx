@@ -61,8 +61,8 @@ export function CreateTable() {
             <Info label={t.live.aboutMode}>{mode === 'cash' ? t.live.infoCash : t.live.infoFun}</Info>
           </span>
           <div className="o-seg">
-            <button type="button" aria-pressed={mode === 'cash'} onClick={() => setMode('cash')}>€ {t.common.cash}<small>{t.create.cashSub}</small></button>
-            <button type="button" aria-pressed={mode === 'fun'} onClick={() => setMode('fun')}>{t.common.fun}<small>{t.create.funSub}</small></button>
+            <button type="button" aria-pressed={mode === 'cash'} onClick={() => setMode('cash')}>€ {t.common.cash}</button>
+            <button type="button" aria-pressed={mode === 'fun'} onClick={() => setMode('fun')}>{t.common.fun}</button>
           </div>
         </div>
 

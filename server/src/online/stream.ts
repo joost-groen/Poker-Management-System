@@ -17,9 +17,12 @@ export const tableStream: RequestHandler = (req, res) => {
     'X-Accel-Buffering': 'no',
   });
   res.flushHeaders();
-  const unsubscribe = subscribe(String(req.params.code), account.id, (view) => {
-    res.write(`data: ${JSON.stringify(view)}\n\n`);
-  });
+  const unsubscribe = subscribe(
+    String(req.params.code),
+    account.id,
+    (view) => res.write(`data: ${JSON.stringify(view)}\n\n`),
+    (message) => res.write(`event: chat\ndata: ${JSON.stringify(message)}\n\n`),
+  );
   const beat = setInterval(() => res.write(': ping\n\n'), HEARTBEAT_MS);
   req.on('close', () => {
     clearInterval(beat);

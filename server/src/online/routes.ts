@@ -1,6 +1,8 @@
 import { Router, type Request } from 'express';
 import type { TableDetail } from '../../../shared/online.ts';
-import { getAccount, login, logout, register, requireAccount, setAvatar } from './auth.ts';
+import { deleteAccount, listAccounts, updateAccount } from './admin.ts';
+import { getAccount, login, logout, register, requireAccount, requireOnlineAdmin, setAvatar } from './auth.ts';
+import { accountHands, tableHands } from './history.ts';
 import { int, onlineErrors } from './http.ts';
 import { onlinePlayer, onlineRanking, tableResult } from './stats.ts';
 import { tableStream } from './stream.ts';
@@ -13,7 +15,7 @@ const code = (req: Request) => String(req.params.code);
 // Accounts
 
 online.post('/register', (req, res) => {
-  res.status(201).json(register(req.body ?? {}));
+  res.status(201).json(register(req.body ?? {}, req.ip ?? ''));
 });
 
 online.post('/login', (req, res) => {
@@ -33,6 +35,12 @@ online.get('/me', (req, res) => {
 
 online.patch('/me', (req, res) => {
   res.json(setAvatar(req.account!.id, req.body?.avatar));
+});
+
+const before = (req: Request) => (req.query.before === undefined ? undefined : int(req.query.before, 'before', 1));
+
+online.get('/me/hands', (req, res) => {
+  res.json(accountHands(req.account!.id, before(req)));
 });
 
 // Tables
@@ -55,6 +63,14 @@ online.get('/tables/:code/view', (req, res) => {
 });
 
 online.get('/tables/:code/stream', tableStream);
+
+online.get('/tables/:code/hands', (req, res) => {
+  res.json(tableHands(code(req), req.account!.id, before(req)));
+});
+
+online.post('/tables/:code/chat', (req, res) => {
+  res.status(201).json(tables.postChat(code(req), req.account!, req.body ?? {}));
+});
 
 online.post('/tables/:code/join', (req, res) => {
   const seat = req.body?.seat === undefined ? undefined : int(req.body.seat, 'seat', 0, 8);
@@ -83,6 +99,33 @@ online.post('/tables/:code/leave', (req, res) => {
 
 online.post('/tables/:code/close', (req, res) => {
   res.json(tables.close(code(req), req.account!));
+});
+
+// Admin: accounts and any live table
+
+online.get('/admin/accounts', requireOnlineAdmin, (_req, res) => {
+  res.json(listAccounts());
+});
+
+online.patch('/admin/accounts/:id', requireOnlineAdmin, (req, res) => {
+  res.json(updateAccount(req.account!, int(req.params.id, 'account', 1), req.body ?? {}));
+});
+
+online.delete('/admin/accounts/:id', requireOnlineAdmin, (req, res) => {
+  deleteAccount(req.account!, int(req.params.id, 'account', 1));
+  res.status(204).end();
+});
+
+online.post('/tables/:code/bots', (req, res) => {
+  res.json(tables.fillBots(code(req), req.account!, req.body ?? {}));
+});
+
+online.post('/tables/:code/bots/remove', (req, res) => {
+  res.json(tables.removeBot(code(req), req.account!, int(req.body?.accountId, 'account', 1)));
+});
+
+online.post('/tables/:code/kick', requireOnlineAdmin, (req, res) => {
+  res.json(tables.kick(code(req), req.account!, int(req.body?.accountId, 'account', 1)));
 });
 
 // Stats: closed cash tables only

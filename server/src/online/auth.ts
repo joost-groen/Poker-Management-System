@@ -1,6 +1,7 @@
 import type { RequestHandler } from 'express';
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { AVATARS, type Account, type SessionResponse } from '../../../shared/online.ts';
+import { BOT_STYLE, type BotLevel } from '../../../shared/poker/bots.ts';
 import { odb } from './db.ts';
 import { OnlineError } from './http.ts';
 
@@ -8,6 +9,10 @@ import { OnlineError } from './http.ts';
 // The session token travels as `X-Online-Session`, so it never collides with the group code's Authorization header.
 
 const SESSION_DAYS = 180;
+/** Needed to create an account. Unset: nobody can register. */
+const INVITE_CODE = process.env.ONLINE_INVITE_CODE ?? '';
+/** Needed to register as an administrator. Unset: admins can only be appointed by another admin. */
+const ADMIN_CODE = process.env.ONLINE_ADMIN_CODE ?? '';
 const MAX_FAILURES = 10;
 const WINDOW_MS = 15 * 60 * 1000;
 const failures = new Map<string, { count: number; since: number }>();
@@ -29,6 +34,12 @@ function hashPassword(password: string): string {
 // Unknown usernames still pay for one scrypt run, so timing doesn't reveal which names exist.
 const DUMMY = hashPassword(randomBytes(16).toString('hex'));
 
+function same(a: string, b: string): boolean {
+  const x = createHash('sha256').update(a).digest();
+  const y = createHash('sha256').update(b).digest();
+  return timingSafeEqual(x, y);
+}
+
 function checkPassword(password: string, stored: string): boolean {
   const [, salt, hash] = stored.split('$');
   const expected = Buffer.from(hash, 'hex');
@@ -42,7 +53,7 @@ export function username(value: unknown): string {
   return s;
 }
 
-function password(value: unknown): string {
+export function password(value: unknown): string {
   const s = typeof value === 'string' ? value : '';
   if (s.length < 6 || s.length > 200) throw new OnlineError(400, 'password_short', 'Password needs at least 6 characters');
   return s;
@@ -60,20 +71,53 @@ function createSession(account: Account): SessionResponse {
   return { token, account };
 }
 
-export function getAccount(id: number): Account {
-  const a = odb.prepare('SELECT id, username, avatar FROM accounts WHERE id = ?').get(id) as Account | undefined;
-  if (!a) throw new OnlineError(404, 'account_not_found', 'Player not found');
-  return { ...a };
+export function hashNewPassword(value: unknown): string {
+  return hashPassword(password(value));
 }
 
-export function register(body: { username?: unknown; password?: unknown; avatar?: unknown }): SessionResponse {
+const accountRow = (a: { id: number; username: string; avatar: string; admin: number; bot?: string | null }): Account => ({
+  id: a.id, username: a.username, avatar: a.avatar, admin: a.admin === 1, ...(a.bot ? { bot: a.bot as BotLevel } : {}),
+});
+
+export function getAccount(id: number): Account {
+  const a = odb.prepare('SELECT id, username, avatar, admin, bot FROM accounts WHERE id = ?').get(id) as Parameters<typeof accountRow>[0] | undefined;
+  if (!a) throw new OnlineError(404, 'account_not_found', 'Player not found');
+  return accountRow(a);
+}
+
+export interface RegisterInput {
+  username?: unknown;
+  password?: unknown;
+  avatar?: unknown;
+  /** The invite code, or the admin code when `admin` is true. */
+  code?: unknown;
+  admin?: unknown;
+}
+
+/** Needs the invite code; with `admin` the admin code instead. Wrong codes count as failed logins for the IP. */
+export function register(body: RegisterInput, ip = ''): SessionResponse {
+  if (limited(ip)) throw new OnlineError(429, 'too_many_attempts', 'Too many failed attempts, try again later');
+  const admin = body.admin === true;
+  const expected = admin ? ADMIN_CODE : INVITE_CODE;
+  if (!expected) throw new OnlineError(403, 'registration_closed', admin ? 'Admin registration is closed' : 'Registration is closed');
+  const code = typeof body.code === 'string' ? body.code.trim() : '';
+  if (!same(code, expected)) {
+    fail(ip);
+    throw new OnlineError(403, admin ? 'admin_code_invalid' : 'invite_invalid', admin ? 'Wrong admin code' : 'Wrong invite code');
+  }
   const name = username(body.username);
   const pw = password(body.password);
   const av = avatar(body.avatar);
   const taken = odb.prepare('SELECT 1 FROM accounts WHERE username = ?').get(name);
   if (taken) throw new OnlineError(409, 'username_taken', `${name} is taken`, { name });
-  const id = Number(odb.prepare('INSERT INTO accounts (username, password, avatar) VALUES (?, ?, ?)').run(name, hashPassword(pw), av).lastInsertRowid);
+  const id = Number(odb.prepare('INSERT INTO accounts (username, password, avatar, admin) VALUES (?, ?, ?, ?)').run(name, hashPassword(pw), av, admin ? 1 : 0).lastInsertRowid);
   return createSession(getAccount(id));
+}
+
+function fail(ip: string) {
+  const f = failures.get(ip);
+  if (f && Date.now() - f.since <= WINDOW_MS) f.count++;
+  else failures.set(ip, { count: 1, since: Date.now() });
 }
 
 function limited(ip: string): boolean {
@@ -91,14 +135,13 @@ export function login(body: { username?: unknown; password?: unknown }, ip: stri
   if (limited(ip)) throw new OnlineError(429, 'too_many_attempts', 'Too many failed logins, try again later');
   const name = typeof body.username === 'string' ? body.username.trim() : '';
   const pw = typeof body.password === 'string' ? body.password : '';
-  const row = odb.prepare('SELECT id, password FROM accounts WHERE username = ?').get(name) as { id: number; password: string } | undefined;
+  const row = odb.prepare('SELECT id, password, blocked FROM accounts WHERE username = ? AND bot IS NULL').get(name) as { id: number; password: string; blocked: number } | undefined;
   const ok = checkPassword(pw, row?.password ?? DUMMY) && row !== undefined;
   if (!ok) {
-    const f = failures.get(ip);
-    if (f && Date.now() - f.since <= WINDOW_MS) f.count++;
-    else failures.set(ip, { count: 1, since: Date.now() });
+    fail(ip);
     throw new OnlineError(401, 'wrong_login', 'Wrong username or password');
   }
+  if (row.blocked) throw new OnlineError(403, 'account_blocked', 'This account is blocked');
   return createSession(getAccount(row.id));
 }
 
@@ -111,16 +154,42 @@ export function setAvatar(id: number, value: unknown): Account {
   return getAccount(id);
 }
 
+const sessionStmt = odb.prepare(`
+  SELECT a.id, a.username, a.avatar, a.admin FROM sessions s JOIN accounts a ON a.id = s.account_id
+  WHERE s.token_hash = ? AND a.blocked = 0 AND s.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`);
+
+/** The signed-in account for a session token; blocked accounts have none. */
+export function sessionAccount(token: string): Account | null {
+  if (!token) return null;
+  const row = sessionStmt.get(hashToken(token)) as Parameters<typeof accountRow>[0] | undefined;
+  return row ? accountRow(row) : null;
+}
+
 export const requireAccount: RequestHandler = (req, _res, next) => {
   const token = req.get('x-online-session') ?? '';
-  const hash = hashToken(token);
-  const row = token
-    ? (odb.prepare(`
-        SELECT a.id, a.username, a.avatar FROM sessions s JOIN accounts a ON a.id = s.account_id
-        WHERE s.token_hash = ? AND s.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`).get(hash) as Account | undefined)
-    : undefined;
-  if (!row) throw new OnlineError(401, 'session_required', 'Please sign in');
-  req.account = { ...row };
-  req.sessionHash = hash;
+  const account = sessionAccount(token);
+  if (!account) throw new OnlineError(401, 'session_required', 'Please sign in');
+  req.account = account;
+  req.sessionHash = hashToken(token);
   next();
 };
+
+export const requireOnlineAdmin: RequestHandler = (req, _res, next) => {
+  if (!req.account?.admin) throw new OnlineError(403, 'admin_required', 'Only admins can do that');
+  next();
+};
+
+/**
+ * The bot account for `level` number `index` (0 = the level's first name), created on first use. Its username has
+ * characters people can't register with, and it has no usable password, so nobody can sign in as a bot.
+ */
+export function botAccount(level: BotLevel, index: number): Account {
+  const style = BOT_STYLE[level];
+  const round = Math.floor(index / style.names.length);
+  const name = `${style.names[index % style.names.length]}${round ? ` ${round + 1}` : ''} (Bot)`;
+  const row = odb.prepare('SELECT id FROM accounts WHERE username = ? AND bot = ?').get(name, level) as { id: number } | undefined;
+  if (row) return getAccount(row.id);
+  const id = Number(odb.prepare('INSERT INTO accounts (username, password, avatar, bot) VALUES (?, ?, ?, ?)')
+    .run(name, `bot$${randomBytes(16).toString('hex')}$`, style.avatars[index % style.avatars.length], level).lastInsertRowid);
+  return getAccount(id);
+}

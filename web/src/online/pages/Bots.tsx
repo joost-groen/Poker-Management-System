@@ -5,15 +5,21 @@ import { advise, review, type Leak } from '../../../../shared/poker/coach.ts';
 import { describe, evaluate } from '../../../../shared/poker/evaluate.ts';
 import { act, startHand, type Action, type HandState } from '../../../../shared/poker/holdem.ts';
 import { viewFor } from '../../../../shared/poker/view.ts';
+import { Info } from '../../components/Info.tsx';
 import { useAccount } from '../api.ts';
 import { readBotStats, recordBotHand } from '../botStats.ts';
-import { ActionBar } from '../components/ActionBar.tsx';
-import { CoachPanel, FeedbackLine, HandReview, LeakList, type ReviewedFeedback } from '../components/CoachPanel.tsx';
-import { OHeader, SoundToggle } from '../components/Nav.tsx';
+import { recordOf } from '../../../../shared/poker/history.ts';
+import { useTurnAlert, useWakeLock } from '../alerts.ts';
+import { handsWithLeak, readBotHands, saveBotHand } from '../botHistory.ts';
+import { ActionBar, PreActions, usePreAction } from '../components/ActionBar.tsx';
+import { HistoryList } from '../components/HandReplay.tsx';
+import { CoachPanel, FeedbackLine, HandReview, LeakList, RevealList, type ReviewedFeedback } from '../components/CoachPanel.tsx';
+import { OHeader, Sheet, SoundToggle } from '../components/Nav.tsx';
 import { PlayingCard } from '../components/PlayingCard.tsx';
 import { dealDelay, TableFelt } from '../components/TableFelt.tsx';
 import { chips, signedBb } from '../format.ts';
 import { handName, useOT } from '../i18n.ts';
+import { usePrefs, setPref } from '../prefs.ts';
 import { soundsFor } from '../sound.ts';
 import { useStagedHand } from '../stage.ts';
 
@@ -47,15 +53,68 @@ interface Player {
   bought: number;
 }
 
+/** A running bot game, kept on the device so a reload or a closed app picks up where it stopped. */
+interface Saved {
+  setup: Setup;
+  players: Player[];
+  hand: HandState | null;
+  button: number | null;
+  handNo: number;
+  summary: { hands: number; won: number; biggest: number };
+  sessionLeaks: Partial<Record<Leak, number>>;
+}
+
+const saveKey = (mode: BotMode) => `poker-online-botgame-${mode}`;
+
+function loadGame(mode: BotMode): Saved | null {
+  try {
+    const raw = localStorage.getItem(saveKey(mode));
+    return raw ? (JSON.parse(raw) as Saved) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveGame(mode: BotMode, game: Saved | null) {
+  try {
+    if (game) localStorage.setItem(saveKey(mode), JSON.stringify(game));
+    else localStorage.removeItem(saveKey(mode));
+  } catch {
+    /* resuming is a convenience */
+  }
+}
+
 export function Bots({ mode }: { mode: BotMode }) {
-  const [setup, setSetup] = useState<Setup | null>(null);
+  // Only the game that was running when the page opened is resumed; once it ends, new settings start fresh.
+  const [saved, setSaved] = useState(() => loadGame(mode));
+  const [setup, setSetup] = useState<Setup | null>(saved?.setup ?? null);
   const [round, setRound] = useState(0);
+  const leave = () => {
+    saveGame(mode, null);
+    setSaved(null);
+  };
   if (!setup) return <BotSetup mode={mode} onStart={setSetup} />;
-  return <BotGame key={round} mode={mode} setup={setup} onAgain={() => setRound((r) => r + 1)} onExit={() => setSetup(null)} />;
+  return (
+    <BotGame
+      key={round}
+      mode={mode}
+      setup={setup}
+      saved={saved}
+      onAgain={() => {
+        leave();
+        setRound((r) => r + 1);
+      }}
+      onExit={() => {
+        leave();
+        setSetup(null);
+      }}
+    />
+  );
 }
 
 function BotSetup({ mode, onStart }: { mode: BotMode; onStart: (s: Setup) => void }) {
   const t = useOT();
+  const prefs = usePrefs();
   const [level, setLevel] = useState<BotLevel>('beginner');
   const [opponents, setOpponents] = useState(3);
   const [stackBb, setStackBb] = useState(100);
@@ -63,11 +122,17 @@ function BotSetup({ mode, onStart }: { mode: BotMode; onStart: (s: Setup) => voi
 
   return (
     <main className="o-page bare narrow">
-      <OHeader title={mode === 'learn' ? t.bots.learnTitle : t.bots.practiceTitle} back="/online" />
-      <p className="o-sub">{mode === 'learn' ? t.home.learnSub : t.home.practiceSub}</p>
+      <OHeader title={mode === 'learn' ? t.bots.learnTitle : t.bots.practiceTitle} back="/online">
+        <Info label={t.bots.about}>{t.bots.localNote}</Info>
+      </OHeader>
 
       <section className="o-section">
-        <h2 className="o-label">{t.bots.level}</h2>
+        <h2 className="o-label">
+          {t.bots.level}
+          <Info label={t.bots.aboutLevels}>
+            {BOT_LEVELS.map((l) => <span key={l} style={{ display: 'block', marginBottom: 6 }}><b>{t.bots.levels[l]}</b>: {t.bots.levelInfo[l]}</span>)}
+          </Info>
+        </h2>
         <div className="o-levels">
           {BOT_LEVELS.map((l) => {
             const r = stats.levels[l];
@@ -76,8 +141,7 @@ function BotSetup({ mode, onStart }: { mode: BotMode; onStart: (s: Setup) => voi
                 <span className="o-emoji" aria-hidden="true">{BOT_STYLE[l].avatars[0]}</span>
                 <span>
                   <strong>{t.bots.levels[l]}</strong>
-                  <small>{t.bots.levelInfo[l]}</small>
-                  <small>{r ? t.bots.record(r.hands, signedBb(r.netBb)) : t.bots.noRecord}</small>
+                  {r && <small>{t.bots.record(r.hands, signedBb(r.netBb))}</small>}
                 </span>
               </button>
             );
@@ -103,18 +167,39 @@ function BotSetup({ mode, onStart }: { mode: BotMode; onStart: (s: Setup) => voi
         </div>
       </section>
 
-      <p className="o-note">{mode === 'practice' && `${t.bots.practiceNote} `}{t.bots.localNote}</p>
+      {mode === 'practice' && (
+        <label className="o-switch">
+          <input type="checkbox" checked={prefs.handName} onChange={(e) => setPref('handName', e.target.checked)} />
+          <strong>{t.bots.showHand}</strong>
+        </label>
+      )}
+
+      {mode === 'learn' && (
+        <nav className="o-modes" aria-label={t.learn.more}>
+          <a className="o-mode mint" href="#/online/chart">
+            <span className="o-emoji" aria-hidden="true">🗺️</span>
+            <strong>{t.learn.chart}</strong>
+          </a>
+          <a className="o-mode peach" href="#/online/drill">
+            <span className="o-emoji" aria-hidden="true">🎯</span>
+            <strong>{t.learn.drill}</strong>
+          </a>
+        </nav>
+      )}
+
       <button type="button" className="o-btn block" onClick={() => onStart({ level, opponents, stackBb })}>{t.bots.start}</button>
     </main>
   );
 }
 
-function BotGame({ mode, setup, onAgain, onExit }: { mode: BotMode; setup: Setup; onAgain: () => void; onExit: () => void }) {
+function BotGame({ mode, setup, saved, onAgain, onExit }: { mode: BotMode; setup: Setup; saved: Saved | null; onAgain: () => void; onExit: () => void }) {
   const t = useOT();
   const account = useAccount();
+  const prefs = usePrefs();
   const start = setup.stackBb * BB;
-  const playersRef = useRef<Player[]>([]);
+  const playersRef = useRef<Player[]>(saved?.players ?? []);
   const [players, setPlayersState] = useState<Player[]>(() => {
+    if (saved) return saved.players;
     const style = BOT_STYLE[setup.level];
     const list: Player[] = [{ id: YOU, name: account?.username ?? t.common.you, avatar: account?.avatar ?? '😎', seat: 0, stack: start, bought: start }];
     for (let i = 0; i < setup.opponents; i++) {
@@ -127,15 +212,18 @@ function BotGame({ mode, setup, onAgain, onExit }: { mode: BotMode; setup: Setup
     playersRef.current = list;
     setPlayersState(list);
   };
-  const [hand, setHand] = useState<HandState | null>(null);
-  const button = useRef<number | null>(null);
-  const handNo = useRef(0);
+  const [hand, setHand] = useState<HandState | null>(saved?.hand ?? null);
+  const button = useRef<number | null>(saved?.button ?? null);
+  const handNo = useRef(saved?.handNo ?? 0);
   const reviewRef = useRef<ReviewedFeedback[]>([]);
   const [reviewed, setReviewed] = useState<ReviewedFeedback[]>([]);
   const [lastFeedback, setLastFeedback] = useState<ReviewedFeedback | null>(null);
-  const [summary, setSummary] = useState({ hands: 0, won: 0, biggest: 0 });
-  const [sessionLeaks, setSessionLeaks] = useState<Partial<Record<Leak, number>>>({});
+  const [summary, setSummary] = useState(saved?.summary ?? { hands: 0, won: 0, biggest: 0 });
+  const [sessionLeaks, setSessionLeaks] = useState<Partial<Record<Leak, number>>>(saved?.sessionLeaks ?? {});
   const [ended, setEnded] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  /** Learn: the opponents' cards turned up after the hand. */
+  const [revealed, setRevealed] = useState(false);
 
   const me = players[0];
 
@@ -157,6 +245,7 @@ function BotGame({ mode, setup, onAgain, onExit }: { mode: BotMode; setup: Setup
     reviewRef.current = [];
     setReviewed([]);
     setLastFeedback(null);
+    setRevealed(false);
     setHand(h);
   }, [start]);
 
@@ -176,11 +265,19 @@ function BotGame({ mode, setup, onAgain, onExit }: { mode: BotMode; setup: Setup
     });
     setReviewed(reviewRef.current);
     recordBotHand(setup.level, net / BB, leaks);
-  }, [setup.level]);
+    saveBotHand({ level: setup.level, mode, record: recordOf(next), feedback: reviewRef.current });
+  }, [setup.level, mode]);
+
+  // A restored game carries on with its hand; a new one deals straight away.
+  const handRef = useRef(hand);
+  handRef.current = hand;
+  useEffect(() => {
+    if (!handRef.current) deal();
+  }, [deal]);
 
   useEffect(() => {
-    deal();
-  }, [deal]);
+    saveGame(mode, { setup, players, hand, button: button.current, handNo: handNo.current, summary, sessionLeaks });
+  }, [mode, setup, players, hand, summary, sessionLeaks]);
 
   // The screen replays every step; bots and the next deal wait until it has caught up.
   const target = useMemo(() => (hand ? viewFor(hand, YOU) : null), [hand]);
@@ -206,6 +303,9 @@ function BotGame({ mode, setup, onAgain, onExit }: { mode: BotMode; setup: Setup
   }, [mode, hand, settled, ended, deal]);
 
   const yourTurn = Boolean(settled && view?.legal);
+  useTurnAlert(yourTurn, t.table.yourTurn);
+  useWakeLock(!ended);
+  const pre = usePreAction(view, settled, (a) => onAct(a));
   const advice = useMemo(() => (mode === 'learn' && settled && view?.legal ? advise(view) : null), [mode, settled, view]);
 
   const onAct = (a: Action) => {
@@ -217,6 +317,23 @@ function BotGame({ mode, setup, onAgain, onExit }: { mode: BotMode; setup: Setup
     }
     apply(act(hand, YOU, a));
   };
+
+  const busted = me.stack === 0 && (!hand || (hand.result && view?.result));
+  // Learn: once the hand is over and on screen, every opponent's cards can be turned up.
+  const showAll = mode === 'learn' && revealed && Boolean(hand?.result && view?.result && settled);
+  const feltView = showAll && view && hand ? { ...view, players: view.players.map((p, i) => ({ ...p, cards: p.cards ?? hand.players[i].cards })) } : view;
+  // Learn: Enter deals the next hand once the review is up.
+  const canDeal = Boolean(view?.result && settled && mode === 'learn' && !busted && !ended);
+  useEffect(() => {
+    if (!canDeal) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || (e.target as HTMLElement).tagName === 'INPUT') return;
+      if (e.key === 'Enter' && (e.target as HTMLElement).tagName !== 'BUTTON') deal();
+      if (e.key === 'v' || e.key === 'V') setRevealed((r) => !r);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [canDeal, deal]);
 
   const rebuy = () => {
     setPlayers(playersRef.current.map((p) => (p.id === YOU ? { ...p, stack: p.stack + start, bought: p.bought + start } : p)));
@@ -230,17 +347,17 @@ function BotGame({ mode, setup, onAgain, onExit }: { mode: BotMode; setup: Setup
   const net = me.stack - me.bought;
   const actor = view && view.toAct !== null && !view.result ? view.players[view.toAct] : null;
   const waitingFor = actor && actor.id !== YOU ? actor.name : null;
-  const busted = me.stack === 0 && (!hand || (hand.result && view?.result));
 
   return (
     <main className="o-page bare">
       <OHeader title={`${mode === 'learn' ? t.bots.learnTitle : t.bots.practiceTitle} · ${t.bots.levels[setup.level]}`} back="/online">
         <SoundToggle />
+        <button type="button" className="icon-btn" aria-label={t.history.title} title={t.history.title} onClick={() => setShowHistory(true)}><HistoryIcon /></button>
         <button type="button" className="o-btn ghost small" onClick={() => setEnded(true)}>{t.bots.endSession}</button>
       </OHeader>
 
       <div className={`o-game${mode === 'practice' ? ' solo' : ''}`}>
-        <TableFelt maxSeats={players.length} seats={seats} hand={view} youSeat={0} format={chips} />
+        <TableFelt maxSeats={players.length} seats={seats} hand={feltView} youSeat={0} format={chips} revealFolded={showAll} />
 
         <div className="o-hand">
           {myCards && (
@@ -250,7 +367,7 @@ function BotGame({ mode, setup, onAgain, onExit }: { mode: BotMode; setup: Setup
               ))}
             </span>
           )}
-          {mode === 'learn' && myScore && !iFolded && <span className="o-hand-name">{handName(t, myScore)}</span>}
+          {(mode === 'learn' || prefs.handName) && myScore && !iFolded && <span className="o-hand-name">{handName(t, myScore)}</span>}
         </div>
 
         {mode === 'learn' && (
@@ -258,6 +375,18 @@ function BotGame({ mode, setup, onAgain, onExit }: { mode: BotMode; setup: Setup
             {lastFeedback && !yourTurn && !view?.result && <FeedbackLine feedback={lastFeedback} />}
             {advice && view && <CoachPanel advice={advice} format={chips} betting={view.currentBet === 0} />}
             {view?.result && <HandReview items={reviewed} />}
+            {showAll && hand?.result && (
+              <RevealList
+                board={hand.board}
+                showdown={hand.result.showdown}
+                format={chips}
+                hands={hand.players.filter((p) => p.id !== YOU).map((p) => ({
+                  id: p.id, name: p.name, avatar: players.find((x) => x.id === p.id)?.avatar ?? '🤖', cards: p.cards,
+                  folded: hand.actions.find((a) => a.playerId === p.id && a.type === 'fold')?.street ?? null,
+                  net: hand.result!.net[p.id],
+                }))}
+              />
+            )}
           </aside>
         )}
 
@@ -270,12 +399,26 @@ function BotGame({ mode, setup, onAgain, onExit }: { mode: BotMode; setup: Setup
           ) : yourTurn && view ? (
             <ActionBar view={view} format={chips} onAct={onAct} />
           ) : view?.result && settled && mode === 'learn' ? (
-            <button type="button" className="o-btn block" onClick={deal}>{t.bots.nextHand}</button>
+            <div className="o-action-row" style={{ gridTemplateColumns: '1fr 1fr' }}>
+              <button type="button" className="o-act" aria-pressed={revealed} onClick={() => setRevealed(!revealed)}>
+                {revealed ? t.reveal.hide : t.reveal.show}<kbd>V</kbd>
+              </button>
+              <button type="button" className="o-act main" onClick={deal}>{t.bots.nextHand}<kbd>↵</kbd></button>
+            </div>
           ) : (
-            <p className="o-wait">{view?.result ? t.table.waiting : waitingFor ? t.table.thinking(waitingFor) : '…'}</p>
+            <>
+              <p className="o-wait" style={pre.available ? { minHeight: 0 } : undefined}>{view?.result ? t.table.waiting : waitingFor ? t.table.thinking(waitingFor) : '…'}</p>
+              <PreActions state={pre} format={chips} />
+            </>
           )}
         </div>
       </div>
+
+      {showHistory && (
+        <Sheet title={t.history.title} onClose={() => setShowHistory(false)}>
+          <BotHistory />
+        </Sheet>
+      )}
 
       {ended && (
         <div className="o-sheet" role="dialog" aria-modal="true" aria-label={t.bots.summary}>
@@ -305,3 +448,27 @@ function BotGame({ mode, setup, onAgain, onExit }: { mode: BotMode; setup: Setup
     </main>
   );
 }
+
+/** Your latest bot hands on this device, newest first. */
+export function BotHistory({ leak }: { leak?: Leak }) {
+  const t = useOT();
+  const hands = useMemo(() => (leak ? handsWithLeak(leak) : readBotHands()), [leak]);
+  return (
+    <HistoryList
+      viewerId={YOU}
+      empty={t.history.emptyBots}
+      items={hands.map((h) => ({
+        key: h.id, record: h.record, title: `${t.bots.levels[h.level]}`, at: h.at, maxSeats: h.record.players.length, format: chips,
+        avatars: Object.fromEntries(h.record.players.map((p) => [p.id, p.id === YOU ? '😎' : botAvatar(h.level, p.id)])),
+      }))}
+    />
+  );
+}
+
+const botAvatar = (level: BotLevel, id: string) => BOT_STYLE[level].avatars[Number(id.replace('bot', ''))] ?? '🤖';
+
+const HistoryIcon = () => (
+  <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M3.5 12a8.5 8.5 0 1 0 2.5-6" /><path d="M3.5 4v4h4" /><path d="M12 8v4l3 2" />
+  </svg>
+);

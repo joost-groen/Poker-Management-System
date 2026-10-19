@@ -3,7 +3,7 @@ import type { HandView } from '../../../shared/poker/view.ts';
 
 // Table sounds, synthesised with Web Audio: no files to load, and they work offline in the installed app.
 
-export type Sound = 'deal' | 'card' | 'flop' | 'check' | 'chips' | 'allIn' | 'fold' | 'turn' | 'win' | 'pot';
+export type Sound = 'deal' | 'card' | 'flop' | 'check' | 'chips' | 'allIn' | 'fold' | 'turn' | 'win' | 'pot' | 'message';
 
 const KEY = 'poker-online-sound';
 const listeners = new Set<() => void>();
@@ -26,6 +26,10 @@ export function setMuted(value: boolean) {
   }
   for (const l of listeners) l();
   if (!value) play('chips');
+}
+
+export function isMuted(): boolean {
+  return muted;
 }
 
 export function useMuted(): boolean {
@@ -144,6 +148,9 @@ export function play(sound: Sound) {
       break;
     case 'pot':
       chips(c, now, 7);
+      break;
+    case 'message':
+      tone(c, now, { freq: 1250, to: 1600, gain: 0.06, len: 0.12 });
       break;
     case 'win':
       chips(c, now, 6);

@@ -27,6 +27,8 @@ export function Auth({ next }: { next: string }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [avatar, setAvatar] = useState(AVATARS[0]);
+  const [code, setCode] = useState('');
+  const [asAdmin, setAsAdmin] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -41,7 +43,7 @@ export function Auth({ next }: { next: string }) {
     try {
       const res = mode === 'signIn'
         ? await oapi<SessionResponse>('/login', 'POST', { username, password })
-        : await oapi<SessionResponse>('/register', 'POST', { username, password, avatar });
+        : await oapi<SessionResponse>('/register', 'POST', { username, password, avatar, code, admin: asAdmin });
       setSession(res);
     } catch (err) {
       setError(onlineErrorText(err));
@@ -59,23 +61,34 @@ export function Auth({ next }: { next: string }) {
         <button type="button" aria-pressed={mode === 'register'} onClick={() => setMode('register')}>{t.auth.register}</button>
       </div>
       <form className="o-section" onSubmit={submit}>
-        <label className="o-label" htmlFor="o-user">{t.auth.username}</label>
+        <span className="o-label">
+          <label htmlFor="o-user">{t.auth.username}</label>
+          {mode === 'register' && <Info label={t.auth.aboutRules}>{t.auth.hint}</Info>}
+        </span>
         <input id="o-user" className="o-input" autoComplete="username" autoCapitalize="off" autoCorrect="off" value={username} onChange={(e) => setUsername(e.target.value)} />
         <label className="o-label" htmlFor="o-pass">{t.auth.password}</label>
         <input id="o-pass" className="o-input" type="password" autoComplete={mode === 'signIn' ? 'current-password' : 'new-password'} value={password} onChange={(e) => setPassword(e.target.value)} />
         {mode === 'register' && (
           <>
+            <span className="o-label">
+              <label htmlFor="o-code">{asAdmin ? t.auth.adminCode : t.auth.inviteCode}</label>
+              <Info label={t.auth.aboutCodes}>{t.auth.infoCodes}</Info>
+            </span>
+            <input id="o-code" className="o-input" type="password" autoComplete="off" autoCapitalize="off" autoCorrect="off" value={code} onChange={(e) => setCode(e.target.value)} />
+            <label className="o-switch">
+              <input type="checkbox" checked={asAdmin} onChange={(e) => setAsAdmin(e.target.checked)} />
+              <strong>{t.auth.asAdmin}</strong>
+            </label>
             <span className="o-label">{t.auth.avatar}</span>
             <div className="o-avatars" role="group" aria-label={t.auth.avatar}>
               {AVATARS.map((a) => (
                 <button key={a} type="button" aria-pressed={avatar === a} onClick={() => setAvatar(a)}>{a}</button>
               ))}
             </div>
-            <p className="o-muted o-small">{t.auth.hint}</p>
           </>
         )}
         <OError error={error} />
-        <button className="o-btn block" type="submit" disabled={busy || !username.trim() || !password}>
+        <button className="o-btn block" type="submit" disabled={busy || !username.trim() || !password || (mode === 'register' && !code.trim())}>
           {mode === 'signIn' ? t.auth.submitSignIn : t.auth.submitRegister}
         </button>
       </form>

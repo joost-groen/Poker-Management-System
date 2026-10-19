@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { LiveTableView } from '../../../shared/online.ts';
+import type { ChatMessage, LiveTableView } from '../../../shared/online.ts';
 import { followTable, oapi, onlineErrorText } from './api.ts';
 
 /** GET from the online API. A null path waits. */
@@ -32,9 +32,11 @@ export function useTableStream(code: string | null) {
   const [error, setError] = useState<string | null>(null);
   // Server time minus device time, for the action clock.
   const [offset, setOffset] = useState(0);
+  const [chat, setChat] = useState<ChatMessage[]>([]);
 
   useEffect(() => {
     if (!code) return;
+    setChat([]);
     return followTable(
       code,
       (v) => {
@@ -43,8 +45,10 @@ export function useTableStream(code: string | null) {
       },
       setConnected,
       (e) => setError(onlineErrorText(e)),
+      // A reconnect sends the recent messages again; ids keep them unique.
+      (m) => setChat((list) => (list.some((x) => x.id === m.id) ? list : [...list, m].slice(-60))),
     );
   }, [code]);
 
-  return { view, setView, connected, error, offset };
+  return { view, setView, connected, error, offset, chat };
 }

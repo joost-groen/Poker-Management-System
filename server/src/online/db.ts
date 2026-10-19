@@ -98,6 +98,21 @@ odb.exec(`
   );
 `);
 
+// Columns added after the first release: older files get them with zero (no admins, nobody blocked, no flags).
+const accountCols = new Set((odb.prepare('PRAGMA table_info(accounts)').all() as { name: string }[]).map((c) => c.name));
+for (const col of ['admin', 'blocked']) {
+  if (!accountCols.has(col)) odb.exec(`ALTER TABLE accounts ADD COLUMN ${col} INTEGER NOT NULL DEFAULT 0`);
+}
+// Bot accounts carry their level here; people have NULL.
+if (!accountCols.has('bot')) odb.exec('ALTER TABLE accounts ADD COLUMN bot TEXT');
+
+const handPlayerCols = new Set((odb.prepare('PRAGMA table_info(hand_players)').all() as { name: string }[]).map((c) => c.name));
+for (const col of ['pfr', 'three_bet_chance', 'three_bet', 'saw_flop', 'wtsd', 'wsd']) {
+  if (!handPlayerCols.has(col)) odb.exec(`ALTER TABLE hand_players ADD COLUMN ${col} INTEGER NOT NULL DEFAULT 0`);
+}
+odb.exec('CREATE INDEX IF NOT EXISTS hand_players_account ON hand_players (account_id, hand_id)');
+odb.exec('CREATE INDEX IF NOT EXISTS hands_table ON hands (table_id, id)');
+
 export function otx<T>(fn: () => T): T {
   odb.exec('BEGIN IMMEDIATE');
   try {

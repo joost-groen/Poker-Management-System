@@ -31,6 +31,10 @@ interface Props {
   onTakeSeat?: (seat: number) => void;
   /** Shown in the middle when no hand is running. */
   idle?: string | null;
+  /** Learn mode after a hand: hole cards of players who folded are shown too. */
+  revealFolded?: boolean;
+  /** Chat bubbles over the senders' seats. */
+  bubbles?: { key: string | number; seat: number; text: string; emoji: boolean }[];
 }
 
 /** Seats around an oval, rotated so the viewer is at the bottom. Percentages of the table box. */
@@ -73,7 +77,7 @@ export function resultText(t: OnlineDict, hand: HandView, format: (n: number) =>
     .join(' · ');
 }
 
-export function TableFelt({ maxSeats, seats, hand, youSeat, format, clock, onTakeSeat, idle }: Props) {
+export function TableFelt({ maxSeats, seats, hand, youSeat, format, clock, onTakeSeat, idle, bubbles, revealFolded }: Props) {
   const t = useOT();
   const anchor = youSeat ?? 0;
   const nameOf = (id: string) => {
@@ -145,11 +149,12 @@ export function TableFelt({ maxSeats, seats, hand, youSeat, format, clock, onTak
         // The first raise after the flop is a bet.
         const opened = hand?.street !== 'preflop' && last === hand?.actions.find((a) => a.street === hand.street && a.type === 'raise');
         const stack = p ? p.stack : (info?.stack ?? 0);
-        const showCards = p && s !== youSeat && !p.folded;
+        const showCards = p && s !== youSeat && (!p.folded || (revealFolded && p.cards));
         const isWinner = p ? winners.has(p.id) : false;
         const net = p && hand?.result ? hand.result.net[p.id] : 0;
         const index = p && hand ? hand.players.indexOf(p) : -1;
-        const cls = ['o-seat', turn && 'turn', p?.folded && 'folded', isWinner && net > 0 && 'won'].filter(Boolean).join(' ');
+        const bubble = bubbles?.filter((b) => b.seat === s).at(-1);
+        const cls = ['o-seat', turn && 'turn', p?.folded && 'folded', p?.folded && showCards && 'revealed', isWinner && net > 0 && 'won'].filter(Boolean).join(' ');
         return (
           <div key={s} className={cls} style={pos}>
             {showCards && (
@@ -166,6 +171,7 @@ export function TableFelt({ maxSeats, seats, hand, youSeat, format, clock, onTak
                 ))}
               </span>
             )}
+            {bubble && <span key={bubble.key} className={`o-bubble${bubble.emoji ? ' emoji' : ''}`}>{bubble.text}</span>}
             <span className="o-avatar" aria-hidden="true">{info?.avatar ?? '🙂'}</span>
             {buttonSeat === s && <span className="o-dealer" role="img" aria-label={t.table.dealer}>D</span>}
             <span className="name">{s === youSeat ? t.common.you : (info?.name ?? p?.name)}</span>

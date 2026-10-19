@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseCards } from '../../shared/poker/cards.ts';
-import { BOT_LEVELS, decide, type BotLevel } from '../../shared/poker/bots.ts';
+import { BOT_LEVELS, decide, profileFor, type BotLevel } from '../../shared/poker/bots.ts';
 import { advise, review } from '../../shared/poker/coach.ts';
 import { act, startHand, type HandState } from '../../shared/poker/holdem.ts';
 import { viewFor } from '../../shared/poker/view.ts';
@@ -66,4 +66,23 @@ test('coach: folds trash, raises aces, and calls a free fold a mistake', () => {
   const bb = advise(viewFor(limped, '2'));
   assert.equal(bb.suggestion.type, 'check');
   assert.equal(review(bb, { type: 'fold' }, true).code, 'freeFold');
+});
+
+test('the Casual limps and calls into most flops, then plays the Regular’s game', () => {
+  assert.equal(profileFor('casual', 'flop'), profileFor('regular', 'flop'));
+  assert.equal(profileFor('casual', 'river'), profileFor('regular', 'river'));
+  assert.notEqual(profileFor('casual', 'preflop'), profileFor('regular', 'preflop'));
+  // Share of dealt players who see the flop at a six-handed table of one level.
+  const sawFlop = (level: BotLevel) => {
+    let saw = 0;
+    for (let h = 0; h < 300; h++) {
+      let s = startHand({ players: Array.from({ length: 6 }, (_, i) => ({ id: String(i), name: String(i), seat: i, stack: 2000 })), previousButton: h % 6, sb: 10, bb: 20, rng, handNo: h });
+      while (!s.result) s = act(s, s.toAct!, decide(viewFor(s, s.players[s.toAct!].id), level).action);
+      if (s.board.length >= 3) saw += s.players.filter((p) => !s.actions.some((a) => a.playerId === p.id && a.type === 'fold' && a.street === 'preflop')).length;
+    }
+    return saw / 1800;
+  };
+  const casual = sawFlop('casual');
+  assert.ok(casual > 0.5, `casual sees ${casual}`);
+  assert.ok(casual > sawFlop('beginner'), 'looser than the Beginner before the flop');
 });

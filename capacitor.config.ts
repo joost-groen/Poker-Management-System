@@ -5,11 +5,11 @@ const config: CapacitorConfig = {
   appId: 'com.pokerbank.app',
   appName: 'Poker Bank',
   webDir: 'dist',
-  backgroundColor: '#111311',
+  backgroundColor: '#050505',
   ios: {
     // The page handles safe areas itself (viewport-fit=cover + env(safe-area-inset-*)).
     contentInset: 'never',
-    backgroundColor: '#111311',
+    backgroundColor: '#050505',
   },
 };
 

@@ -41,36 +41,29 @@ export function Home() {
         </header>
 
         <div className="o-home">
-          <section className="o-hero wide">
-            {account ? (
-              <>
-                <span className="o-label">
-                  {t.home.onlineNet}
-                  <Info label={t.home.onlineNet}>{t.home.infoNet}</Info>
-                </span>
-                <span className={`o-hero-value ${toneClass(net)}`}>{net === 0 ? eur(0) : signed(net)}</span>
-                {balances.length > 1 && <Sparkline values={balances} label={t.profile.chart} />}
-              </>
-            ) : (
-              <span className="o-hero-value" style={{ fontSize: 'clamp(36px, 10vw, 56px)' }}>{t.home.tagline}</span>
-            )}
-          </section>
+          {account && (
+            <section className="o-hero wide">
+              <span className="o-label">
+                {t.home.onlineNet}
+                <Info label={t.home.onlineNet}>{t.home.infoNet}</Info>
+              </span>
+              <span className={`o-hero-value ${toneClass(net)}`}>{net === 0 ? eur(0) : signed(net)}</span>
+              {balances.length > 1 && <Sparkline values={balances} label={t.profile.chart} />}
+            </section>
+          )}
 
           <nav className="o-modes wide" aria-label={t.nav.sections}>
             <a className="o-mode mint" href="#/online/practice">
               <span className="o-emoji" aria-hidden="true">🃏</span>
               <strong>{t.home.practice}</strong>
-              <span>{t.home.practiceSub}</span>
             </a>
             <a className="o-mode lilac" href="#/online/learn">
               <span className="o-emoji" aria-hidden="true">🎓</span>
               <strong>{t.home.learn}</strong>
-              <span>{t.home.learnSub}</span>
             </a>
             <a className="o-mode peach" href={account ? '#/online/tables' : `#${loginPath('/online/tables')}`}>
               <span className="o-emoji" aria-hidden="true">🥂</span>
               <strong>{t.home.friends}</strong>
-              <span>{account ? t.home.friendsSub : t.home.signInForFriends}</span>
             </a>
           </nav>
 

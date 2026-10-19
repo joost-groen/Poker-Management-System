@@ -29,7 +29,9 @@ const LINES = `
 const cashLines = odb.prepare(`${LINES} WHERE t.status = 'closed' AND t.mode = 'cash' GROUP BY t.id, a.id ORDER BY t.closed_at DESC, t.id DESC`);
 const tableLines = odb.prepare(`${LINES} WHERE t.id = ? GROUP BY a.id ORDER BY a.username COLLATE NOCASE`);
 const handStats = odb.prepare(`
-  SELECT hp.account_id AS accountId, COUNT(*) AS hands, SUM(hp.vpip) AS vpip
+  SELECT hp.account_id AS accountId, COUNT(*) AS hands, SUM(hp.vpip) AS vpip, SUM(hp.pfr) AS pfr,
+         SUM(hp.three_bet_chance) AS threeBetChance, SUM(hp.three_bet) AS threeBet,
+         SUM(hp.saw_flop) AS sawFlop, SUM(hp.wtsd) AS wtsd, SUM(hp.wsd) AS wsd
   FROM hand_players hp JOIN hands h ON h.id = hp.hand_id JOIN tables t ON t.id = h.table_id
   WHERE t.status = 'closed' AND t.mode = 'cash'
   GROUP BY hp.account_id`);
@@ -44,7 +46,8 @@ export function onlineRanking(): OnlineRankingRow[] {
   for (const l of lines) {
     const result = l.cashedOut - l.boughtIn;
     const row = rows.get(l.accountId) ?? {
-      accountId: l.accountId, username: l.username, avatar: l.avatar, tables: 0, hands: 0, net: 0, week: 0, vpip: 0, wins: 0,
+      accountId: l.accountId, username: l.username, avatar: l.avatar, tables: 0, hands: 0, net: 0, week: 0, vpip: 0, pfr: 0,
+      threeBet: 0, wtsd: 0, wsd: 0, wins: 0,
       best: Number.NEGATIVE_INFINITY,
     };
     row.tables++;
@@ -54,11 +57,17 @@ export function onlineRanking(): OnlineRankingRow[] {
     row.best = Math.max(row.best, result);
     rows.set(l.accountId, row);
   }
-  for (const h of handStats.all() as { accountId: number; hands: number; vpip: number }[]) {
+  const share = (n: number, of: number) => (of ? n / of : 0);
+  type HandRow = { accountId: number; hands: number; vpip: number; pfr: number; threeBetChance: number; threeBet: number; sawFlop: number; wtsd: number; wsd: number };
+  for (const h of handStats.all() as unknown as HandRow[]) {
     const row = rows.get(h.accountId);
     if (!row) continue;
     row.hands = h.hands;
-    row.vpip = h.hands ? h.vpip / h.hands : 0;
+    row.vpip = share(h.vpip, h.hands);
+    row.pfr = share(h.pfr, h.hands);
+    row.threeBet = share(h.threeBet, h.threeBetChance);
+    row.wtsd = share(h.wtsd, h.sawFlop);
+    row.wsd = share(h.wsd, h.wtsd);
   }
   return [...rows.values()].sort((a, b) => b.net - a.net || a.username.localeCompare(b.username));
 }

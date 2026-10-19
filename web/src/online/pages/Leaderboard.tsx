@@ -19,9 +19,8 @@ export function Leaderboard() {
     <>
       <main className="o-page narrow">
         <OHeader title={t.stats.title}>
-          <Info label={t.stats.aboutVpip}>{t.stats.infoVpip}</Info>
+          <Info label={t.stats.aboutVpip}>{t.stats.onlyCash} {t.stats.infoVpip}</Info>
         </OHeader>
-        <p className="o-sub">{t.stats.onlyCash}</p>
         <div className="o-seg">
           <button type="button" aria-pressed={!week} onClick={() => setWeek(false)}>{t.stats.allTime}</button>
           <button type="button" aria-pressed={week} onClick={() => setWeek(true)}>{t.stats.week}</button>
@@ -40,7 +39,7 @@ export function Leaderboard() {
                     <span className="o-avatar">{r.avatar}</span>
                     <span className="grow">
                       <span className="title">{r.username}{r.accountId === account?.id ? ` · ${t.common.you}` : ''}</span>
-                      <span className="o-muted o-small">{r.tables} {t.common.tables} · {r.hands} {t.common.hands} · {t.stats.vpip} {percent(r.vpip)}</span>
+                      <span className="o-muted o-small">{r.tables} {t.common.tables} · {r.hands} {t.common.hands} · {t.stats.vpip} {percent(r.vpip)} · {t.stats.pfr} {percent(r.pfr)}</span>
                     </span>
                     <span className={`o-num ${{ pos: 'o-pos', neg: 'o-neg', '': '' }[tone(value)]}`}>{signed(value)}</span>
                   </a>

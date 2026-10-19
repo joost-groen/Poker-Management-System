@@ -1,7 +1,7 @@
 // Client for /api/online. Uses Poker Bank's server address and group code, plus its own session token.
 import { useSyncExternalStore } from 'react';
-import type { Account, LiveTableView, OnlineErrorBody, OnlineErrorCode, SessionResponse } from '../../../shared/online.ts';
-import { getPin, getServer } from '../api.ts';
+import type { Account, ChatMessage, LiveTableView, OnlineErrorBody, OnlineErrorCode, SessionResponse } from '../../../shared/online.ts';
+import { getPin, getServer, notifyAdminChange } from '../api.ts';
 import { odict } from './i18n.ts';
 
 const SESSION_KEY = 'poker-online-session';
@@ -49,6 +49,7 @@ export function setSession(next: SessionResponse | null) {
     /* storage unavailable: keep it in memory */
   }
   listeners.forEach((fn) => fn());
+  notifyAdminChange();
 }
 
 export function setAccount(account: Account) {
@@ -108,6 +109,7 @@ export function followTable(
   onView: (view: LiveTableView) => void,
   onStatus: (connected: boolean) => void,
   onError: (err: unknown) => void,
+  onChat: (message: ChatMessage) => void,
 ): () => void {
   let stopped = false;
   let ctrl: AbortController | null = null;
@@ -129,8 +131,11 @@ export function followTable(
           while ((end = buffer.indexOf('\n\n')) >= 0) {
             const event = buffer.slice(0, end);
             buffer = buffer.slice(end + 2);
-            const data = event.split('\n').filter((l) => l.startsWith('data: ')).map((l) => l.slice(6)).join('\n');
-            if (data) onView(JSON.parse(data) as LiveTableView);
+            const lines = event.split('\n');
+            const data = lines.filter((l) => l.startsWith('data: ')).map((l) => l.slice(6)).join('\n');
+            if (!data) continue;
+            if (lines.includes('event: chat')) onChat(JSON.parse(data) as ChatMessage);
+            else onView(JSON.parse(data) as LiveTableView);
           }
         }
       } catch (err) {

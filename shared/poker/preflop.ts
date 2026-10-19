@@ -28,3 +28,11 @@ export function handGroup(hole: Card[]): number {
 
 export const isSuited = (hole: Card[]) => suitOf(hole[0]) === suitOf(hole[1]);
 export const isPair = (hole: Card[]) => rankOf(hole[0]) === rankOf(hole[1]);
+
+/** Worst starting-hand group worth opening (raising first in) from each position at a full table. */
+export const OPEN_RANGE = { early: 3, middle: 4, late: 5, button: 6, sb: 5, bb: 5 } as const;
+
+/** Short tables play wider: hands are worth more with fewer players left to act. */
+export function shortHandedBonus(players: number): number {
+  return players <= 2 ? 2 : players <= 4 ? 1 : 0;
+}

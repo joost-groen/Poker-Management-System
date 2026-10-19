@@ -1,5 +1,8 @@
-import type { Advice, Feedback } from '../../../../shared/poker/coach.ts';
-import type { Action } from '../../../../shared/poker/holdem.ts';
+import type { Advice, Feedback, Leak } from '../../../../shared/poker/coach.ts';
+import type { Card } from '../../../../shared/poker/cards.ts';
+import { describe, evaluate } from '../../../../shared/poker/evaluate.ts';
+import type { Action, Street } from '../../../../shared/poker/holdem.ts';
+import { PlayingCard } from './PlayingCard.tsx';
 import { Info } from '../../components/Info.tsx';
 import { percent } from '../format.ts';
 import { handName, useOT, type OnlineDict } from '../i18n.ts';
@@ -33,6 +36,7 @@ export function CoachPanel({ advice, format, betting }: { advice: Advice; format
           <span>{t.coach.winChance}<Info label={t.coach.aboutEquity}>{t.coach.infoEquity}</Info></span>
           <strong className="o-num">{percent(advice.equity)}</strong>
           <span className="o-meter"><span style={{ width: percent(advice.equity) }} /></span>
+          <small>{t.coach.anyTwo(percent(advice.equityAny))}</small>
         </div>
         <div className="o-tile">
           <span>{t.coach.potOdds}<Info label={t.coach.aboutPotOdds}>{t.coach.infoPotOdds}</Info></span>
@@ -60,6 +64,18 @@ export function CoachPanel({ advice, format, betting }: { advice: Advice; format
           <small>{t.positions[advice.position]}</small>
         </div>
       </div>
+      {advice.ranges.length > 0 && (
+        <p className="o-small o-muted o-ranges">
+          {t.coach.ranges}{' '}
+          {advice.ranges.map((r, i) => (
+            <span key={r.id}>
+              {i > 0 && ' · '}
+              <b>{r.name}</b> {r.share >= 0.99 ? t.coach.anyHand : t.coach.top(percent(r.share))}{r.narrowed ? ` ${t.coach.narrowed}` : ''}
+            </span>
+          ))}
+          <Info label={t.coach.aboutRanges}>{t.coach.infoRanges}</Info>
+        </p>
+      )}
       <div className="o-suggest">
         <strong>{t.coach.suggest}: {actionText(t, advice.suggestion, format, betting)}</strong>
         {t.coach.tips[advice.reason](p)}
@@ -105,18 +121,69 @@ export function HandReview({ items }: { items: ReviewedFeedback[] }) {
   );
 }
 
-export function LeakList({ leaks }: { leaks: Partial<Record<keyof OnlineDict['coach']['leaks'], number>> }) {
+export function LeakList({ leaks, onPick }: { leaks: Partial<Record<keyof OnlineDict['coach']['leaks'], number>>; onPick?: (leak: Leak) => void }) {
   const t = useOT();
   const rows = Object.entries(leaks).filter(([, n]) => n && n > 0).sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0));
   if (!rows.length) return <p className="o-muted o-small">{t.profile.noLeaks}</p>;
   return (
     <ul className="o-list">
       {rows.map(([leak, n]) => (
-        <li key={leak} className="o-item">
-          <span className="grow">{t.coach.leaks[leak as keyof OnlineDict['coach']['leaks']]}</span>
-          <span className="o-num o-muted">×{n}</span>
+        <li key={leak}>
+          {onPick ? (
+            <button type="button" className="o-item" onClick={() => onPick(leak as Leak)}>
+              <span className="grow">
+                {t.coach.leaks[leak as keyof OnlineDict['coach']['leaks']]}
+                <span className="o-muted o-small" style={{ display: 'block' }}>{t.profile.showHands}</span>
+              </span>
+              <span className="o-num o-muted">×{n}</span>
+            </button>
+          ) : (
+            <span className="o-item">
+              <span className="grow">{t.coach.leaks[leak as keyof OnlineDict['coach']['leaks']]}</span>
+              <span className="o-num o-muted">×{n}</span>
+            </span>
+          )}
         </li>
       ))}
     </ul>
+  );
+}
+
+export interface RevealedHand {
+  id: string;
+  name: string;
+  avatar: string;
+  cards: Card[];
+  /** Street they folded on, or null when they stayed in. */
+  folded: Street | null;
+  net: number;
+}
+
+/** Learn mode after a hand: every opponent's cards, how far they went, and what they had with the board. */
+export function RevealList({ hands, board, showdown, format }: { hands: RevealedHand[]; board: Card[]; showdown: boolean; format: Fmt }) {
+  const t = useOT();
+  return (
+    <section className="o-coach" aria-live="polite">
+      <h2>🔍 {t.reveal.title}</h2>
+      <ul className="o-list o-history">
+        {hands.map((h) => {
+          const made = board.length >= 3 ? handName(t, describe(evaluate([...h.cards, ...board]))) : null;
+          const status = h.folded ? t.reveal.folded(h.folded, t.table.streets[h.folded]) : showdown ? made : t.reveal.noShowdown;
+          return (
+            <li key={h.id} className="o-item">
+              <span className="o-cards o-mini">{h.cards.map((c, i) => <PlayingCard key={i} card={c} size="sm" />)}</span>
+              <span className="grow">
+                <span className="title">{h.avatar} {h.name}</span>
+                <span className="o-muted o-small" style={{ display: 'block' }}>
+                  {status}
+                  {h.folded && made && ` · ${t.reveal.wouldHave(made)}`}
+                </span>
+              </span>
+              <span className={`o-num ${h.net > 0 ? 'o-pos' : h.net < 0 ? 'o-neg' : 'o-muted'}`}>{h.net > 0 ? '+' : ''}{format(h.net)}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }

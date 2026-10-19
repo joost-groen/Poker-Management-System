@@ -3,6 +3,7 @@ import { equity, type Outs } from './equity.ts';
 import { describe, evaluate, type HandRank } from './evaluate.ts';
 import { positionOf, type Action, type Position, type Street } from './holdem.ts';
 import { handGroup, handLabel } from './preflop.ts';
+import { rangeEquity, rangeShare, readRange } from './ranges.ts';
 import type { HandView } from './view.ts';
 
 // Learn mode: the numbers behind a decision, a suggested line, and feedback on what the player did.
@@ -14,7 +15,12 @@ export interface Advice {
   start: { label: string; group: number; /** Worst group worth opening from this position. */ range: number };
   /** Made hand, from the flop on. */
   hand: HandRank | null;
+  /** Against the hands the opponents' actions point to. */
   equity: number;
+  /** Against random cards, for comparison. */
+  equityAny: number;
+  /** Each live opponent's likely range: share of all starting hands, and whether bets after the flop narrowed it. */
+  ranges: { id: string; name: string; share: number; narrowed: boolean }[];
   opponents: number;
   toCall: number;
   pot: number;
@@ -29,14 +35,18 @@ export function advise(view: HandView): Advice {
   const p = view.players[me];
   const cards = p.cards!;
   const d = decide(view, 'coach', () => 0.999);
-  const opponents = view.players.filter((q, i) => i !== me && !q.folded).length;
+  const live = view.players.flatMap((q, i) => (i !== me && !q.folded ? [i] : []));
+  const opponents = live.length;
+  const models = live.map((i) => readRange(view, i));
   const position = positionOf(view, me);
   return {
     street: view.street,
     position,
     start: { label: handLabel(cards), group: handGroup(cards), range: openingRange(position) },
     hand: view.board.length ? describe(evaluate([...cards, ...view.board])) : null,
-    equity: d.equity ?? equity(cards, view.board, opponents, 800).equity,
+    equity: d.equity ?? rangeEquity(cards, view.board, models, 1500).equity,
+    equityAny: equity(cards, view.board, opponents, 800).equity,
+    ranges: models.map((m, k) => ({ id: m.id, name: view.players[live[k]].name, share: rangeShare(m.group), narrowed: m.lines.length > 0 })),
     opponents,
     toCall: view.legal!.call,
     pot: view.pot,

@@ -1,4 +1,6 @@
 // API shapes of the online poker section (/api/online). Separate from Poker Bank's types on purpose.
+import type { BotLevel } from './poker/bots.ts';
+import type { HandRecord } from './poker/history.ts';
 import type { HandView } from './poker/view.ts';
 import type { Transfer } from './types.ts';
 
@@ -14,6 +16,19 @@ export interface Account {
   id: number;
   username: string;
   avatar: string;
+  /** Registered with the admin code, or made admin by another admin: manages accounts, tables and Poker Bank. */
+  admin: boolean;
+  /** A computer player at fun tables, with its level. Bot accounts can't sign in. */
+  bot?: BotLevel;
+}
+
+/** An account as the admin page lists it. */
+export interface AdminAccount extends Account {
+  blocked: boolean;
+  createdAt: string;
+  /** Live tables played at (any buy-in) and hands dealt in; accounts with history can be blocked but not deleted. */
+  tables: number;
+  hands: number;
 }
 
 export interface SessionResponse {
@@ -46,7 +61,7 @@ export interface SeatView {
   sittingOut: boolean;
   /** Leaves (cashing out) when the current hand ends. */
   leaving: boolean;
-  /** Total bought in at this table so far. */
+  /** In at this table now: every buy-in and rebuy, minus what was cashed out by standing up earlier. */
   boughtIn: number;
   /** Has the table open right now. */
   connected: boolean;
@@ -99,6 +114,14 @@ export interface OnlineRankingRow {
   week: number;
   /** Share of hands where the player put money in voluntarily before the flop (0..1). */
   vpip: number;
+  /** Share of hands raised before the flop. */
+  pfr: number;
+  /** Re-raises when facing one raise before the flop, per chance. */
+  threeBet: number;
+  /** Went to showdown, per flop seen. */
+  wtsd: number;
+  /** Won at showdown, per showdown. */
+  wsd: number;
   wins: number;
   best: number;
 }
@@ -140,10 +163,56 @@ export type OnlineErrorCode =
   | 'not_your_turn'
   | 'illegal_action'
   | 'hand_over'
+  | 'chat_too_fast'
+  | 'registration_closed'
+  | 'invite_invalid'
+  | 'admin_code_invalid'
+  | 'account_blocked'
+  | 'admin_required'
+  | 'account_has_history'
+  | 'not_on_yourself'
+  | 'bots_fun_only'
+  | 'bot_leaving'
   | 'server_error';
 
 export interface OnlineErrorBody {
   error: string;
   code: OnlineErrorCode;
   params?: Record<string, string | number>;
+}
+
+/** A finished hand at a live table, with the hole cards the viewer may see. */
+export interface HistoryHand {
+  id: number;
+  code: string;
+  tableName: string;
+  mode: StakesMode;
+  maxSeats: number;
+  at: string;
+  record: HandRecord;
+  /** Avatars of the players in the hand, by player id. */
+  avatars: Record<string, string>;
+}
+
+/** Quick reactions at a live table. */
+export const REACTIONS = ['👍', '😂', '😮', '😬', '🔥', '🙏', '🍀', '🐟', '🦈', '💸'] as const;
+
+/** Longest voice message (ms) and its largest size as a data URL. */
+export const VOICE_MAX_MS = 15_000;
+export const VOICE_MAX_CHARS = 360_000;
+
+export interface ChatMessage {
+  id: number;
+  accountId: number;
+  username: string;
+  avatar: string;
+  /** Seat of the sender when sent, so the felt can show the bubble there. */
+  seat: number | null;
+  kind: 'text' | 'reaction' | 'voice';
+  text?: string;
+  /** Voice: a data:audio/... URL, dropped from older messages to save memory. */
+  audio?: string;
+  ms?: number;
+  /** Server time (ms). */
+  at: number;
 }
