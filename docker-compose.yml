@@ -15,7 +15,7 @@ services:
     volumes:
       - poker-data:/data  # database + daily backups in /data/backups
     ports:
-      - "127.0.0.1:3000:3000"  # only for checks on the server itself; the world goes through Traefik
+      - "3000:3000"  # only for checks on the server itself; the world goes through Traefik
     networks: [frontend]
     labels:
         - traefik.enable=true
@@ -29,9 +29,9 @@ services:
         - traefik.http.services.poker-websecure.loadbalancer.responseforwarding.flushinterval=1ms
 
 
-  networks:
+networks:
     frontend:
       external: true
 
-  volumes:
+volumes:
     poker-data:
