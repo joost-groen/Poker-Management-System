@@ -94,6 +94,21 @@ const RANK_COUNT: Record<Category, number> = {
   highCard: 5, pair: 4, twoPair: 3, trips: 3, straight: 1, flush: 5, fullHouse: 2, quads: 2, straightFlush: 1,
 };
 
+/** The five cards that make the best hand out of 5 to 7 cards. */
+export function bestFive(cards: readonly Card[]): Card[] {
+  if (cards.length <= 5) return [...cards];
+  const best = evaluate(cards);
+  const pick = (from: number, chosen: Card[]): Card[] | null => {
+    if (chosen.length === 5) return evaluate(chosen) === best ? chosen : null;
+    for (let i = from; i <= cards.length - (5 - chosen.length); i++) {
+      const found = pick(i + 1, [...chosen, cards[i]]);
+      if (found) return found;
+    }
+    return null;
+  };
+  return pick(0, [])!;
+}
+
 export function categoryOf(score: number): Category {
   return CATEGORIES[score >> 20];
 }

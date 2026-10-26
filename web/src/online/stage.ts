@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { LoggedAction, Street } from '../../../shared/poker/holdem.ts';
-import { PACE, type HandView } from '../../../shared/poker/view.ts';
+import { boardMs, dealMs, PACE, type HandView } from '../../../shared/poker/view.ts';
 
 // The engine jumps from one decision to the next: a call that closes the betting comes back with the next
 // street already dealt, and an all-in comes back with the whole board and the winner. On screen the hand is
@@ -44,40 +44,64 @@ function dealStreet(v: HandView, street: Street, board: number[], reveal: HandVi
   };
 }
 
+/** A hand that was only just dealt (blinds in, nobody acted yet): its cards go round the table on screen. */
+export function justDealt(v: HandView): boolean {
+  return !v.result && v.board.length === 0 && v.actions.every((a) => a.type === 'sb' || a.type === 'bb');
+}
+
 /** The frames that lead from what is on screen to the latest state. */
 export function stage(from: HandView | null, to: HandView): Frame[] {
+  // A new hand: the cards go round the table before anyone can act.
+  if ((!from || from.handNo !== to.handNo) && justDealt(to)) {
+    return [{ view: idle(to), delay: 0 }, { view: to, delay: dealMs(to.players.length) }];
+  }
   if (!from || from.handNo !== to.handNo || from.actions.length > to.actions.length || !from.actions.every((a, i) => sameAction(a, to.actions[i]))) {
     return [{ view: to, delay: 0 }];
   }
   const frames: Frame[] = [];
   let cur = idle(from);
+  // A street being dealt holds up the next action until its cards are turned up.
+  let dealing = 0;
   for (const a of to.actions.slice(from.actions.length)) {
     if (a.street !== cur.street) {
+      const before = cur.board.length;
       cur = dealStreet(cur, a.street, to.board, null);
       frames.push({ view: cur, delay: PACE.street });
+      dealing = cur.board.length > before ? boardMs(cur.board.length) : 0;
     }
     cur = applyAction(cur, a);
-    frames.push({ view: cur, delay: frames.length ? PACE.action : 0 });
+    frames.push({ view: cur, delay: frames.length ? Math.max(PACE.action, dealing) : 0 });
+    dealing = 0;
   }
 
   if (to.result) {
     // All-in: the live hands are turned up, then the board runs out one street at a time.
     const showdown = to.result.showdown;
+    let ranOut = false;
     if (cur.board.length < to.board.length) {
       cur = dealStreet(cur, cur.street, to.board, showdown ? to : null);
       frames.push({ view: cur, delay: PACE.street });
       while (cur.board.length < to.board.length) {
         const street = STREET_OF_BOARD[cur.board.length === 0 ? 3 : cur.board.length + 1];
+        // Each street waits until the one before has turned up.
+        const before = cur.board.length;
         cur = dealStreet(cur, street, to.board, showdown ? to : null);
-        frames.push({ view: cur, delay: PACE.runout });
+        frames.push({ view: cur, delay: PACE.runout + (ranOut ? boardMs(before) : 0) });
+        ranOut = true;
       }
     }
-    frames.push({ view: to, delay: frames.length ? PACE.result : 0 });
+    // After a runout the river turns up before the winner is shown.
+    frames.push({ view: to, delay: frames.length ? PACE.result + (ranOut ? boardMs(cur.board.length) : 0) : 0 });
     return frames;
   }
 
-  // The betting round closed: the next street is dealt after a moment.
-  frames.push({ view: to, delay: to.street !== cur.street ? PACE.street : 0 });
+  // The betting round closed: the next street is dealt after a moment, and turned up before anyone acts.
+  if (to.street !== cur.street) {
+    frames.push({ view: idle(to), delay: PACE.street });
+    frames.push({ view: to, delay: boardMs(to.board.length) });
+    return frames;
+  }
+  frames.push({ view: to, delay: 0 });
   return frames;
 }
 

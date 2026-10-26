@@ -3,6 +3,7 @@ import type { HistoryHand, LiveTableView, TableDetail } from '../../../../shared
 import { BOT_LEVELS, BOT_STYLE, type BotLevel } from '../../../../shared/poker/bots.ts';
 import type { Action } from '../../../../shared/poker/holdem.ts';
 import { describe, evaluate } from '../../../../shared/poker/evaluate.ts';
+import { FACE_AT, PACE } from '../../../../shared/poker/view.ts';
 import { Info } from '../../components/Info.tsx';
 import { Arrow } from '../../components/Icons.tsx';
 import { day } from '../../format.ts';
@@ -13,7 +14,7 @@ import { ChatPanel, type ChatSend } from '../components/Chat.tsx';
 import { HistoryList } from '../components/HandReplay.tsx';
 import { ConfirmSheet, OError, OHeader, OLoading, Sheet, SoundToggle } from '../components/Nav.tsx';
 import { PlayingCard } from '../components/PlayingCard.tsx';
-import { dealDelay, TableFelt, type SeatInfo } from '../components/TableFelt.tsx';
+import { dealDelay, outcomeOf, TableFelt, type SeatInfo } from '../components/TableFelt.tsx';
 import { amount, signedAmount } from '../format.ts';
 import { handName, useOT } from '../i18n.ts';
 import { usePrefs } from '../prefs.ts';
@@ -109,10 +110,10 @@ function LiveTable({ code, onClosed }: { code: string; onClosed: () => void }) {
   }, [bubbles.length, now]);
   const unread = chat.filter((m) => m.id > readUpTo && String(m.accountId) !== meId).length;
 
-  const restShown = Boolean(view?.rest);
+  const restCount = view?.rest?.length ?? 0;
   useEffect(() => {
-    if (restShown) play('flop');
-  }, [restShown]);
+    for (let k = 0; k < restCount; k++) play('card', k * PACE.peek + PACE.turnUp * FACE_AT.card);
+  }, [restCount]);
 
   const history = useOnline<HistoryHand[]>(panel === 'history' ? `/tables/${code}/hands` : null);
 
@@ -133,6 +134,7 @@ function LiveTable({ code, onClosed }: { code: string; onClosed: () => void }) {
   const myCards = hand && hand.you !== null ? hand.players[hand.you].cards : null;
   const myFolded = hand && hand.you !== null ? hand.players[hand.you].folded : false;
   const myHand = myCards && hand!.board.length ? describe(evaluate([...myCards, ...hand!.board])) : null;
+  const myOutcome = hand && hand.you !== null ? outcomeOf(hand, hand.you) : null;
   const seated = view.seats.filter(Boolean).length;
   const acting = running && hand!.toAct !== null ? hand!.players[hand!.toAct!].seat : null;
   const clock = view.deadline && acting !== null ? { seat: acting, end: view.deadline - offset, total: ACTION_MS } : null;
@@ -188,7 +190,7 @@ function LiveTable({ code, onClosed }: { code: string; onClosed: () => void }) {
         <span className="o-badge o-num" aria-label={t.live.code}>{view.code}</span>
       </div>
 
-      <div className="o-game">
+      <div className="o-game live">
         <TableFelt
           maxSeats={view.maxSeats}
           seats={seats}
@@ -198,6 +200,7 @@ function LiveTable({ code, onClosed }: { code: string; onClosed: () => void }) {
           clock={clock}
           bubbles={bubbles}
           rest={view.rest}
+          onShowRest={canRest && !busy ? () => post('rest') : undefined}
           onTakeSeat={view.you === null && !view.closing ? (seat) => post('join', { seat }) : undefined}
           idle={view.started ? t.table.waiting : t.live.startHint}
         />
@@ -206,11 +209,12 @@ function LiveTable({ code, onClosed }: { code: string; onClosed: () => void }) {
           {myCards && (
             <span className="o-cards">
               {[...myCards].sort((a, b) => b - a).map((c, i) => (
-                <PlayingCard key={`${hand!.handNo}-${i}`} card={c} size="lg" dim={myFolded} delay={dealDelay(hand!, hand!.you!, i)} />
+                <PlayingCard key={`${hand!.handNo}-${i}`} card={c} size="lg" dim={myFolded} win={myOutcome === 'win'} lose={myOutcome === 'lose'} delay={dealDelay(hand!, hand!.you!, i)} />
               ))}
             </span>
           )}
           {myHand && !myFolded && <span className="o-hand-name">{handName(t, myHand)}</span>}
+          {canShow && <button type="button" className="o-btn ghost small" disabled={busy} onClick={() => post('show')}>{t.table.showCards}</button>}
         </div>
 
         <aside className="o-side">
@@ -246,7 +250,7 @@ function LiveTable({ code, onClosed }: { code: string; onClosed: () => void }) {
           <div className="o-chat-inline">{chatPanel}</div>
         </aside>
 
-        <div className="o-actions">
+        <div className={`o-actions${yourTurn || (running && dealtIn && pre.available) ? '' : ' tools'}`}>
           {yourTurn ? (
             <>
               <p className="o-wait" style={{ minHeight: 0 }}>{t.table.yourTurn}{clock && <TurnTimer end={clock.end} />}</p>
@@ -258,9 +262,7 @@ function LiveTable({ code, onClosed }: { code: string; onClosed: () => void }) {
               <PreActions state={pre} format={fmt} />
             </>
           ) : (
-            <div className="o-toolbar">
-              {canShow && <button type="button" className="o-btn" disabled={busy} onClick={() => post('show')}>{t.table.showCards}</button>}
-              {canRest && <button type="button" className="o-btn ghost" disabled={busy} onClick={() => post('rest')}>{t.table.showRest}</button>}
+            <div className="o-table-tools">
               {view.you === null && !view.closing && (
                 <button type="button" className="o-btn block" disabled={busy || (seated >= view.maxSeats && !view.seats.some((x) => x?.account.bot))} onClick={() => post('join')}>{t.live.join(fmt(view.buyIn))}</button>
               )}
@@ -282,7 +284,7 @@ function LiveTable({ code, onClosed }: { code: string; onClosed: () => void }) {
               {host && !view.closing && (
                 <button type="button" className="o-btn danger" disabled={busy} onClick={() => setConfirming({ text: t.live.endConfirm, confirm: t.live.end, path: 'close' })}>{t.live.end}</button>
               )}
-              {running && dealtIn && <p className="o-wait" style={{ width: '100%' }}>…</p>}
+              {running && dealtIn && <p className="o-wait">…</p>}
             </div>
           )}
         </div>

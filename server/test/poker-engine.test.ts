@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { newDeck, parseCards, type Card } from '../../shared/poker/cards.ts';
 import { equity } from '../../shared/poker/equity.ts';
-import { describe, evaluate } from '../../shared/poker/evaluate.ts';
+import { bestFive, describe, evaluate } from '../../shared/poker/evaluate.ts';
 import { act, legalActions, PokerError, potTotal, remainingBoard, startHand, type HandState } from '../../shared/poker/holdem.ts';
 import { viewFor } from '../../shared/poker/view.ts';
 
@@ -64,6 +64,14 @@ test('the board a hand would have dealt is the one it deals when played out', ()
     while (!s.result) s = act(s, s.toAct!, { type: 'call' });
     assert.deepEqual(s.board.slice(5 - rest.length), rest);
   }
+});
+
+test('the five cards that make the best hand', () => {
+  const pick = (s: string) => bestFive(parseCards(s)).sort((a, b) => a - b);
+  const cards = (s: string) => parseCards(s).sort((a, b) => a - b);
+  assert.deepEqual(pick('Ah Kh 2h 7h 9h 9d 9c'), cards('Ah Kh 2h 7h 9h'));
+  assert.deepEqual(pick('Ah 2d 3c 4s 5h 9d Kc'), cards('Ah 2d 3c 4s 5h'));
+  assert.deepEqual(pick('7h 7d 2c 2s Kh Kd 3c'), cards('7h 7d Kh Kd 3c'));
 });
 
 test('side pots with three all-ins of different sizes', () => {
