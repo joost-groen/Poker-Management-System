@@ -229,6 +229,9 @@ html.online-mode, html.online-mode body { background: #050505; }
 @keyframes o-move { 85% { opacity: 1; } to { left: var(--tx); top: var(--ty); opacity: 0; } }
 .online .o-bet::before { content: ''; display: inline-block; width: 8px; height: 8px; margin-right: 5px; border-radius: 50%; background: var(--o-glow); vertical-align: 0; }
 .online .o-dealer { position: absolute; z-index: 2; top: 30px; left: calc(50% - 38px); width: 20px; height: 20px; border-radius: 50%; background: #fbfaf6; color: var(--o-ink); font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.online .o-blind { position: absolute; z-index: 2; top: 4px; right: calc(50% + 18px); height: 20px; padding: 0 5px; border-radius: 999px; color: var(--o-ink); font-size: 9px; font-weight: 700; letter-spacing: 0.02em; display: flex; align-items: center; justify-content: center; }
+.online .o-blind.sb { background: var(--o-peach); }
+.online .o-blind.bb { background: var(--o-lilac); }
 
 /* Hero area and actions */
 .online .o-hand { display: flex; align-items: center; justify-content: center; gap: 14px; min-height: 92px; }
@@ -433,6 +436,7 @@ html.online-mode, html.online-mode body { background: #050505; }
   .online .o-seat { width: 110px; }
   .online .o-seat .o-avatar { width: 58px; height: 58px; font-size: 31px; }
   .online .o-dealer { top: 36px; left: calc(50% - 42px); }
+  .online .o-blind { top: 6px; right: calc(50% + 22px); }
   .online .o-seat .name { font-size: 13px; }
   .online .o-pc { width: 54px; height: 76px; }
   .online .o-pc .r { font-size: 21px; }

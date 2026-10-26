@@ -177,6 +177,40 @@ test('hand history: each player sees their own cards, never the others’ unshow
   tables.dropMemory();
 });
 
+test('after a hand: players may show their cards and the board it would have dealt, until the next deal', async () => {
+  const t = tables.createTable(anna, { name: 'Show', mode: 'fun', sb: 10, bb: 20, buyIn: 1000, maxSeats: 2 });
+  tables.join(t.code, anna);
+  tables.join(t.code, ben);
+  tables.start(t.code, anna);
+  const v = await until(() => runningHand(t.code, anna));
+  assert.throws(() => tables.showCards(t.code, anna), /finish/);
+  const folder = byId(toActId(v));
+  const winner = folder.id === anna.id ? ben : anna;
+  tables.action(t.code, folder, { type: 'fold' });
+  assert.throws(() => tables.showRest(t.code, cleo), /not in this hand/);
+
+  const cardsOf = (viewer: Account, of: Account) => tables.tableView(t.code, viewer.id).hand!.players.find((p) => p.id === String(of.id))!.cards;
+  assert.equal(cardsOf(winner, folder), null);
+  tables.showCards(t.code, folder);
+  assert.equal(cardsOf(winner, folder)!.length, 2);
+  assert.equal(cardsOf(cleo, folder)!.length, 2);
+  assert.equal(cardsOf(folder, winner), null);
+  const record = history.tableHands(t.code, winner.id)[0].record;
+  assert.equal(record.players.find((p) => p.id === String(folder.id))!.hole.length, 2);
+
+  assert.equal(tables.tableView(t.code, cleo.id).rest, null);
+  tables.showRest(t.code, winner);
+  const rest = tables.tableView(t.code, cleo.id).rest!;
+  assert.equal(rest.length, 5);
+  assert.ok(rest.every((c) => !cardsOf(folder, folder)!.includes(c)));
+
+  // The next deal closes the window.
+  const next = await until(() => runningHand(t.code, anna));
+  assert.equal(next.rest, null);
+  assert.throws(() => tables.showCards(t.code, folder), /finish/);
+  tables.dropMemory();
+});
+
 test('chat: text, reactions and voice reach every listener; spam and junk are refused', () => {
   const t = tables.createTable(anna, { name: 'Chat', mode: 'fun', sb: 10, bb: 20, buyIn: 1000, maxSeats: 4 });
   tables.join(t.code, anna);

@@ -1,5 +1,6 @@
 // API shapes of the online poker section (/api/online). Separate from Poker Bank's types on purpose.
 import type { BotLevel } from './poker/bots.ts';
+import type { Card } from './poker/cards.ts';
 import type { HandRecord } from './poker/history.ts';
 import type { HandView } from './poker/view.ts';
 import type { Transfer } from './types.ts';
@@ -74,6 +75,8 @@ export interface LiveTableView extends Omit<TableSummary, 'seated' | 'mine' | 'h
   seats: (SeatView | null)[];
   /** The current or last hand, as the viewer may see it. */
   hand: HandView | null;
+  /** The last hand ended before the river and a player asked to see the board it would have dealt. */
+  rest: Card[] | null;
   /** The viewer's seat number. */
   you: number | null;
   /** When the player to act runs out of time (server clock, ms). */
@@ -163,6 +166,7 @@ export type OnlineErrorCode =
   | 'not_your_turn'
   | 'illegal_action'
   | 'hand_over'
+  | 'not_in_hand'
   | 'chat_too_fast'
   | 'registration_closed'
   | 'invite_invalid'

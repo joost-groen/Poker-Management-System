@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import type { Card } from '../../../../shared/poker/cards.ts';
 import { describe } from '../../../../shared/poker/evaluate.ts';
 import type { HandView } from '../../../../shared/poker/view.ts';
 import { handName, useOT, type OnlineDict } from '../i18n.ts';
@@ -35,6 +36,8 @@ interface Props {
   revealFolded?: boolean;
   /** Chat bubbles over the senders' seats. */
   bubbles?: { key: string | number; seat: number; text: string; emoji: boolean }[];
+  /** After a hand that ended early: the board it would have dealt, shown dimmed in the empty slots. */
+  rest?: Card[] | null;
 }
 
 /** Seats around an oval, rotated so the viewer is at the bottom. Percentages of the table box. */
@@ -77,7 +80,7 @@ export function resultText(t: OnlineDict, hand: HandView, format: (n: number) =>
     .join(' · ');
 }
 
-export function TableFelt({ maxSeats, seats, hand, youSeat, format, clock, onTakeSeat, idle, bubbles, revealFolded }: Props) {
+export function TableFelt({ maxSeats, seats, hand, youSeat, format, clock, onTakeSeat, idle, bubbles, revealFolded, rest }: Props) {
   const t = useOT();
   const anchor = youSeat ?? 0;
   const nameOf = (id: string) => {
@@ -86,6 +89,8 @@ export function TableFelt({ maxSeats, seats, hand, youSeat, format, clock, onTak
   };
   const acting = hand && !hand.result && hand.toAct !== null ? hand.players[hand.toAct].seat : null;
   const buttonSeat = hand ? hand.players[hand.button]?.seat : null;
+  const sbSeat = hand ? hand.players[hand.sbIndex]?.seat : null;
+  const bbSeat = hand ? hand.players[hand.bbIndex]?.seat : null;
   const banner = hand ? resultText(t, hand, format, nameOf) : null;
   const winners = new Set(hand?.result?.pots.flatMap((p) => p.winners) ?? []);
   const relOf = (seat: number) => (seat - anchor + maxSeats) % maxSeats;
@@ -118,7 +123,12 @@ export function TableFelt({ maxSeats, seats, hand, youSeat, format, clock, onTak
     <div className="o-felt">
       <div className="o-middle">
         <div className="o-board">
-          {Array.from({ length: 5 }, (_, i) => (hand?.board[i] !== undefined ? <PlayingCard key={`${hand.handNo}-${i}`} card={hand.board[i]} delay={i < 3 ? i * 90 : 0} /> : <CardSlot key={i} />))}
+          {Array.from({ length: 5 }, (_, i) => {
+            if (hand?.board[i] !== undefined) return <PlayingCard key={`${hand.handNo}-${i}`} card={hand.board[i]} delay={i < 3 ? i * 90 : 0} />;
+            const k = i - (hand?.board.length ?? 0);
+            const r = hand?.result && rest ? rest[k] : undefined;
+            return r !== undefined ? <PlayingCard key={`${hand!.handNo}-r${i}`} card={r} dim delay={k * 90} /> : <CardSlot key={i} />;
+          })}
         </div>
         {hand && !hand.result && (
           <div className="o-pot">
@@ -149,7 +159,8 @@ export function TableFelt({ maxSeats, seats, hand, youSeat, format, clock, onTak
         // The first raise after the flop is a bet.
         const opened = hand?.street !== 'preflop' && last === hand?.actions.find((a) => a.street === hand.street && a.type === 'raise');
         const stack = p ? p.stack : (info?.stack ?? 0);
-        const showCards = p && s !== youSeat && (!p.folded || (revealFolded && p.cards));
+        // Folded hands stay hidden unless their owner shows them after the hand (or Learn mode turns them up).
+        const showCards = p && s !== youSeat && (!p.folded || ((revealFolded || hand?.result?.shown[p.id]) && p.cards));
         const isWinner = p ? winners.has(p.id) : false;
         const net = p && hand?.result ? hand.result.net[p.id] : 0;
         const index = p && hand ? hand.players.indexOf(p) : -1;
@@ -174,6 +185,8 @@ export function TableFelt({ maxSeats, seats, hand, youSeat, format, clock, onTak
             {bubble && <span key={bubble.key} className={`o-bubble${bubble.emoji ? ' emoji' : ''}`}>{bubble.text}</span>}
             <span className="o-avatar" aria-hidden="true">{info?.avatar ?? '🙂'}</span>
             {buttonSeat === s && <span className="o-dealer" role="img" aria-label={t.table.dealer}>D</span>}
+            {sbSeat === s && <span className="o-blind sb" role="img" aria-label={t.table.actions.sb}>SB</span>}
+            {bbSeat === s && <span className="o-blind bb" role="img" aria-label={t.table.actions.bb}>BB</span>}
             <span className="name">{s === youSeat ? t.common.you : (info?.name ?? p?.name)}</span>
             <span className="stack">{format(stack)}</span>
             {net > 0 ? (
