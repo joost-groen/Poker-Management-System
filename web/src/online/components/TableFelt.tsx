@@ -1,8 +1,9 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import type { Card } from '../../../../shared/poker/cards.ts';
-import { describe } from '../../../../shared/poker/evaluate.ts';
-import type { HandView } from '../../../../shared/poker/view.ts';
+import { bestFive, describe } from '../../../../shared/poker/evaluate.ts';
+import { holeCardAt, PACE, type HandView } from '../../../../shared/poker/view.ts';
 import { handName, useOT, type OnlineDict } from '../i18n.ts';
+import { justDealt } from '../stage.ts';
 import { CardSlot, cardText, PlayingCard } from './PlayingCard.tsx';
 
 export interface SeatInfo {
@@ -38,6 +39,8 @@ interface Props {
   bubbles?: { key: string | number; seat: number; text: string; emoji: boolean }[];
   /** After a hand that ended early: the board it would have dealt, shown dimmed in the empty slots. */
   rest?: Card[] | null;
+  /** Offered under the board after a hand that ended early. */
+  onShowRest?: () => void;
 }
 
 /** Seats around an oval, rotated so the viewer is at the bottom. Percentages of the table box. */
@@ -50,11 +53,29 @@ type Spot = ReturnType<typeof spot>;
 const SEAT = [42, 41] as const;
 const BET = [27, 25] as const;
 const POT: Spot = { left: '50%', top: '47%' };
+/** Hole cards are pitched from the middle of the table. */
+const DECK = POT;
 
-/** Hole cards come off the deck one at a time, starting left of the button. */
+/** When a hole card lands at its seat: they come off the deck one at a time, starting with the small blind. */
 export function dealDelay(hand: HandView, index: number, round: number): number {
   const n = hand.players.length;
-  return (round * n + ((index - hand.sbIndex + n) % n)) * 70;
+  return holeCardAt(n, (index - hand.sbIndex + n) % n, round) - 120;
+}
+
+/** A face-down card on its way from the deck to a seat. */
+interface Flight {
+  key: string;
+  to: Spot;
+  delay: number;
+}
+
+/**
+ * Board cards turned up on screen this hand, with each one's delay. Kept for the whole hand: a card that changed its
+ * animation or delay once the next street came would play it again.
+ */
+interface Dealt {
+  handNo: number;
+  delays: Record<number, number>;
 }
 
 /** Chips on their way: bets swept into the pot, the pot pushed to its winner. */
@@ -64,6 +85,20 @@ interface Moving {
   to: Spot;
   amount: number;
   win: boolean;
+}
+
+/** At showdown: whether a player who went all the way won chips or lost. */
+export function outcomeOf(hand: HandView, index: number): 'win' | 'lose' | null {
+  const p = hand.players[index];
+  if (!hand.result?.showdown || !p || p.folded) return null;
+  return hand.result.won[p.id] > 0 ? 'win' : 'lose';
+}
+
+/** At showdown: the cards that make the main pot's winning hand(s). */
+function winningCards(hand: HandView): Set<Card> {
+  const r = hand.result;
+  if (!r?.showdown || !r.pots.length) return new Set();
+  return new Set(r.pots[0].winners.flatMap((id) => (r.shown[id] ? bestFive([...r.shown[id], ...hand.board]) : [])));
 }
 
 export function resultText(t: OnlineDict, hand: HandView, format: (n: number) => string, nameOf: (id: string) => string): string | null {
@@ -80,7 +115,7 @@ export function resultText(t: OnlineDict, hand: HandView, format: (n: number) =>
     .join(' · ');
 }
 
-export function TableFelt({ maxSeats, seats, hand, youSeat, format, clock, onTakeSeat, idle, bubbles, revealFolded, rest }: Props) {
+export function TableFelt({ maxSeats, seats, hand, youSeat, format, clock, onTakeSeat, idle, bubbles, revealFolded, rest, onShowRest }: Props) {
   const t = useOT();
   const anchor = youSeat ?? 0;
   const nameOf = (id: string) => {
@@ -93,17 +128,41 @@ export function TableFelt({ maxSeats, seats, hand, youSeat, format, clock, onTak
   const bbSeat = hand ? hand.players[hand.bbIndex]?.seat : null;
   const banner = hand ? resultText(t, hand, format, nameOf) : null;
   const winners = new Set(hand?.result?.pots.flatMap((p) => p.winners) ?? []);
+  const playing = hand ? winningCards(hand) : new Set<Card>();
   const relOf = (seat: number) => (seat - anchor + maxSeats) % maxSeats;
   const seatSpot = (seat: number) => spot(relOf(seat), maxSeats, ...SEAT);
   const betSpot = (seat: number) => spot(relOf(seat), maxSeats, ...BET);
 
   // Each new frame of the hand compares itself with the last one to see which chips move.
+  // A new hand is dealt from the deck round the table, one card per player at a time; a new street turns its cards up.
   const prev = useRef<HandView | null>(null);
   const [moving, setMoving] = useState<Moving[]>([]);
+  const [flights, setFlights] = useState<{ handNo: number; list: Flight[] } | null>(null);
+  const [dealt, setDealt] = useState<Dealt | null>(null);
   useLayoutEffect(() => {
     const before = prev.current;
     prev.current = hand;
+    if (hand && (!before || before.handNo !== hand.handNo) && justDealt(hand)) {
+      const n = hand.players.length;
+      const list: Flight[] = [];
+      for (let round = 0; round < 2; round++) {
+        for (let k = 0; k < n; k++) {
+          const p = hand.players[(hand.sbIndex + k) % n];
+          list.push({ key: `${hand.handNo}-${round}-${p.id}`, to: seatSpot(p.seat), delay: holeCardAt(n, k, round) - PACE.fly });
+        }
+      }
+      setFlights({ handNo: hand.handNo, list });
+    }
     if (!hand || !before || before.handNo !== hand.handNo) return setMoving([]);
+    if (hand.board.length > before.board.length) {
+      const from = before.board.length;
+      setDealt((d) => {
+        const delays = d?.handNo === hand.handNo ? { ...d.delays } : {};
+        // Flop cards one after the other, each face down first and then turned over.
+        for (let i = from; i < hand.board.length; i++) delays[i] = (i - from) * PACE.turnUp;
+        return { handNo: hand.handNo, delays };
+      });
+    }
     const out: Moving[] = [];
     if (before.street !== hand.street || (hand.result && !before.result)) {
       for (const p of before.players) {
@@ -124,10 +183,18 @@ export function TableFelt({ maxSeats, seats, hand, youSeat, format, clock, onTak
       <div className="o-middle">
         <div className="o-board">
           {Array.from({ length: 5 }, (_, i) => {
-            if (hand?.board[i] !== undefined) return <PlayingCard key={`${hand.handNo}-${i}`} card={hand.board[i]} delay={i < 3 ? i * 90 : 0} />;
-            const k = i - (hand?.board.length ?? 0);
-            const r = hand?.result && rest ? rest[k] : undefined;
-            return r !== undefined ? <PlayingCard key={`${hand!.handNo}-r${i}`} card={r} dim delay={k * 90} /> : <CardSlot key={i} />;
+            const upDelay = hand && dealt?.handNo === hand.handNo ? dealt.delays[i] : undefined;
+            let card;
+            if (hand?.board[i] !== undefined) {
+              card = upDelay !== undefined
+                ? <PlayingCard key={`${hand.handNo}-${i}`} card={hand.board[i]} win={playing.has(hand.board[i])} turnUp={i === 4 ? 'river' : true} delay={upDelay} />
+                : <PlayingCard key={`${hand.handNo}-${i}`} card={hand.board[i]} win={playing.has(hand.board[i])} delay={i < 3 ? i * 90 : 0} />;
+            } else {
+              const k = i - (hand?.board.length ?? 0);
+              const r = hand?.result && rest ? rest[k] : undefined;
+              card = r !== undefined ? <PlayingCard key={`${hand!.handNo}-r${i}`} card={r} dim turnUp delay={k * PACE.peek} /> : <CardSlot key={i} />;
+            }
+            return <span key={i} className="o-spot">{card}</span>;
           })}
         </div>
         {hand && !hand.result && (
@@ -135,7 +202,12 @@ export function TableFelt({ maxSeats, seats, hand, youSeat, format, clock, onTak
             {t.table.pot} <strong>{format(hand.pot)}</strong>
           </div>
         )}
-        {banner && <div className="o-banner" role="status">{banner}</div>}
+        {(banner || onShowRest) && (
+          <div className="o-result">
+            {banner && <div className="o-banner" role="status">{banner}</div>}
+            {onShowRest && <button type="button" className="o-peek" onClick={onShowRest}>{t.table.showRest}</button>}
+          </div>
+        )}
         {!hand && idle && <div className="o-pot">{idle}</div>}
       </div>
 
@@ -164,6 +236,7 @@ export function TableFelt({ maxSeats, seats, hand, youSeat, format, clock, onTak
         const isWinner = p ? winners.has(p.id) : false;
         const net = p && hand?.result ? hand.result.net[p.id] : 0;
         const index = p && hand ? hand.players.indexOf(p) : -1;
+        const outcome = hand && index >= 0 ? outcomeOf(hand, index) : null;
         const bubble = bubbles?.filter((b) => b.seat === s).at(-1);
         const cls = ['o-seat', turn && 'turn', p?.folded && 'folded', p?.folded && showCards && 'revealed', isWinner && net > 0 && 'won'].filter(Boolean).join(' ');
         return (
@@ -175,7 +248,8 @@ export function TableFelt({ maxSeats, seats, hand, youSeat, format, clock, onTak
                     key={`${hand!.handNo}-${i}-${c ?? 'back'}`}
                     card={c}
                     size="sm"
-                    win={isWinner && hand?.result?.showdown}
+                    win={outcome === 'win'}
+                    lose={outcome === 'lose'}
                     label={t.table.hidden}
                     delay={c === null ? dealDelay(hand!, index, i) : i * 120}
                   />
@@ -191,6 +265,8 @@ export function TableFelt({ maxSeats, seats, hand, youSeat, format, clock, onTak
             <span className="stack">{format(stack)}</span>
             {net > 0 ? (
               <span className="tag win">+{format(net)}</span>
+            ) : outcome === 'lose' ? (
+              <span className="tag lose">−{format(-net)}</span>
             ) : p?.allIn && !hand?.result ? (
               <span className="tag hot">{t.table.allInTag}</span>
             ) : p?.folded ? (
@@ -214,6 +290,20 @@ export function TableFelt({ maxSeats, seats, hand, youSeat, format, clock, onTak
           </span>
         );
       })}
+      {flights && hand && flights.handNo === hand.handNo && (
+        <>
+          {flights.list.map((f) => (
+            <span
+              key={f.key}
+              className="o-fly"
+              style={{ ...DECK, '--tx': f.to.left, '--ty': f.to.top, animationDelay: `${f.delay}ms`, animationDuration: `${PACE.fly}ms` } as CSSProperties}
+              aria-hidden="true"
+            >
+              <PlayingCard card={null} size="sm" />
+            </span>
+          ))}
+        </>
+      )}
       {moving.map((m) => (
         <span
           key={m.key}
@@ -232,7 +322,7 @@ function Countdown({ clock }: { clock: Clock }) {
   const left = Math.max(clock.end - Date.now(), 0);
   return (
     <span className="o-clock" aria-hidden="true">
-      <span key={clock.end} style={{ animationDuration: `${left}ms`, ['--from' as string]: String(left / clock.total) }} />
+      <span key={clock.end} style={{ animationDuration: `${left}ms`, ['--from' as string]: String(Math.min(1, left / clock.total)) }} />
     </span>
   );
 }

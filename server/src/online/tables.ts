@@ -6,7 +6,7 @@ import {
 import { handFlags, recordOf, type HandRecord } from '../../../shared/poker/history.ts';
 import { BOT_LEVELS, decide, type BotLevel } from '../../../shared/poker/bots.ts';
 import { act, legalActions, remainingBoard, startHand, type Action, type HandState } from '../../../shared/poker/holdem.ts';
-import { replayMs, viewFor } from '../../../shared/poker/view.ts';
+import { leadMs, replayMs, viewFor } from '../../../shared/poker/view.ts';
 import { botAccount, getAccount } from './auth.ts';
 import { odb, otx } from './db.ts';
 import { OnlineError, int, text } from './http.ts';
@@ -14,7 +14,7 @@ import { OnlineError, int, text } from './http.ts';
 // Live tables run in memory, one engine each; the database holds stacks between hands and the ledger.
 
 const ACTION_MS = Number(process.env.ONLINE_ACTION_MS ?? 30_000);
-const NEXT_HAND_MS = Number(process.env.ONLINE_NEXT_HAND_MS ?? 4_000);
+const NEXT_HAND_MS = Number(process.env.ONLINE_NEXT_HAND_MS ?? 12_000);
 /** 0 skips the wait for clients replaying the end of a hand (tests). */
 const REPLAY_SCALE = Number(process.env.ONLINE_REPLAY_SCALE ?? 1);
 /** Bots' thinking time is multiplied by this; 0 makes them act at once (tests). */
@@ -292,18 +292,20 @@ function advance(t: Live) {
   }
   if (!t.hand) return broadcast(t);
   if (t.hand.result) return endHand(t);
-  t.deadline = Date.now() + ACTION_MS;
+  // The clock starts once the clients have dealt the hand or the new street on screen.
+  const lead = leadMs(t.hand) * REPLAY_SCALE;
+  t.deadline = Date.now() + lead + ACTION_MS;
   const level = seatOf(t, Number(t.hand.players[t.hand.toAct!].id))?.account.bot;
-  t.actionTimer = level ? botTurn(t, level) : setTimeout(() => timeout(t), ACTION_MS);
+  t.actionTimer = level ? botTurn(t, level, lead) : setTimeout(() => timeout(t), lead + ACTION_MS);
   t.actionTimer.unref();
   broadcast(t);
 }
 
 /**
- * A bot decides at once but acts after a human-like pause: longer for a raise than for a fold, longer still on a
- * fresh street or a new hand, while the clients replay what just happened.
+ * A bot decides at once but acts after a human-like pause: longer for a raise than for a fold, and only once the
+ * clients have dealt a new hand or street (`lead`).
  */
-function botTurn(t: Live, level: BotLevel): NodeJS.Timeout {
+function botTurn(t: Live, level: BotLevel, lead: number): NodeJS.Timeout {
   const hand = t.hand!;
   const i = hand.toAct!;
   let action: Action;
@@ -312,9 +314,7 @@ function botTurn(t: Live, level: BotLevel): NodeJS.Timeout {
   } catch {
     action = passive(hand);
   }
-  const last = hand.actions.at(-1);
-  const fresh = last?.type === 'bb' ? 1200 : last && last.street !== hand.street ? 900 : 0;
-  const think = (BOT_THINK[action.type] * (1 + Math.random() * 0.8) + fresh) * BOT_SCALE;
+  const think = BOT_THINK[action.type] * (1 + Math.random() * 0.8) * BOT_SCALE + lead;
   return setTimeout(() => {
     if (t.hand !== hand) return;
     t.hand = act(hand, i, action);

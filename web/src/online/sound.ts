@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
-import type { HandView } from '../../../shared/poker/view.ts';
+import { FACE_AT, holeCardAt, PACE, type HandView } from '../../../shared/poker/view.ts';
+import { justDealt } from './stage.ts';
 
 // Table sounds, synthesised with Web Audio: no files to load, and they work offline in the installed app.
 
@@ -111,11 +112,12 @@ function chips(c: AudioContext, at: number, n: number) {
   }
 }
 
-export function play(sound: Sound) {
+/** `after` (ms) schedules the sound, e.g. for a card landing at the end of its deal animation. */
+export function play(sound: Sound, after = 0) {
   if (muted) return;
   const c = audio();
   if (!c || c.state !== 'running') return;
-  const now = c.currentTime + 0.01;
+  const now = c.currentTime + 0.01 + after / 1000;
   switch (sound) {
     case 'deal':
       for (let k = 0; k < 4; k++) card(c, now + k * 0.085);
@@ -163,7 +165,11 @@ export function play(sound: Sound) {
 export function soundsFor(prev: HandView | null, next: HandView | null, me: string | null) {
   if (!next) return;
   if (!prev || prev.handNo !== next.handNo) {
-    if (!next.result) play('deal');
+    // A hand dealt on screen ticks once per card as it lands; one already under way (opening the table) just riffles.
+    const n = next.players.length;
+    if (justDealt(next)) {
+      for (let round = 0; round < 2; round++) for (let k = 0; k < n; k++) play('card', holeCardAt(n, k, round) - 60);
+    } else if (!next.result) play('deal');
     if (next.legal) setTimeout(() => play('turn'), 450);
     return;
   }
@@ -173,9 +179,11 @@ export function soundsFor(prev: HandView | null, next: HandView | null, me: stri
     else if (a.allIn) play('allIn');
     else if (a.type === 'call' || a.type === 'raise') play('chips');
   }
-  const dealt = next.board.length - prev.board.length;
-  if (dealt === 3) play('flop');
-  else if (dealt > 0) play('card');
+  // A street: each card ticks as its face shows, the flop one card after the other, the river after its slow lift.
+  for (let i = prev.board.length; i < next.board.length; i++) {
+    const at = i === 4 ? PACE.river * FACE_AT.river : (i - prev.board.length) * PACE.turnUp + PACE.turnUp * FACE_AT.card;
+    play('card', at);
+  }
   if (next.result && !prev.result) {
     const won = me !== null && (next.result.net[me] ?? 0) > 0;
     play(won ? 'win' : 'pot');

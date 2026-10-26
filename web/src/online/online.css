@@ -164,7 +164,8 @@ html.online-mode, html.online-mode body { background: #050505; }
 .online .o-pc.sm.back::after { inset: 5px; }
 .online .o-pc.slot { background: transparent; box-shadow: inset 0 0 0 1px var(--o-line); animation: none; }
 .online .o-pc.dim { filter: brightness(0.55); }
-.online .o-pc.win { box-shadow: 0 0 0 2px #8ff0bf, 0 4px 14px rgb(143 240 191 / 0.35); }
+.online .o-pc.win { box-shadow: 0 0 0 3px #8ff0bf, 0 4px 16px rgb(143 240 191 / 0.45); }
+.online .o-pc.lose { box-shadow: 0 0 0 3px var(--o-neg), 0 4px 14px rgb(255 155 122 / 0.3); filter: brightness(0.82); }
 @keyframes o-deal { from { transform: translateY(-14px) rotate(-6deg) scale(0.9); opacity: 0; } }
 /* Cards turned up at showdown flip over */
 .online .o-seat .o-pc:not(.back) { animation-name: o-flip; animation-duration: 0.35s; }
@@ -186,9 +187,51 @@ html.online-mode, html.online-mode body { background: #050505; }
   border: 1px solid rgb(255 255 255 / 0.06); box-shadow: inset 0 0 60px rgb(140 207 255 / 0.05);
 }
 .online .o-middle { position: absolute; left: 50%; top: 47%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 10px; width: 76%; }
-.online .o-board { display: flex; gap: 5px; justify-content: center; }
+.online .o-board { display: flex; gap: 10px; justify-content: center; }
+.online .o-spot { position: relative; display: inline-flex; }
+
+/* Dealing: hole cards fly from the middle of the table round to the seats one at a time; board cards turn up. */
+.online .o-fly { position: absolute; z-index: 5; transform: translate(-50%, -50%); pointer-events: none; animation: o-fly cubic-bezier(0.25, 0.7, 0.3, 1) both; }
+.online .o-fly .o-pc { animation: none; box-shadow: inset 0 0 0 3px #fbfaf6, 0 6px 14px rgb(0 0 0 / 0.45); }
+@keyframes o-fly {
+  0% { opacity: 0; transform: translate(-50%, -50%) rotate(-160deg) scale(0.85); }
+  12% { opacity: 1; }
+  82% { opacity: 1; }
+  100% { left: var(--tx); top: var(--ty); opacity: 0; transform: translate(-50%, -50%) rotate(0deg) scale(1); }
+}
+/* A board card slides in face down, rests a moment, then turns over; the cover hides the face until it is half way
+   round (75% for a flop or turn card, 70% for the river: FACE_AT in view.ts). */
+.online .o-pc.up { animation: o-board-up 1s both; }
+.online .o-pc.up::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  background: repeating-linear-gradient(45deg, rgb(255 255 255 / 0.45) 0 3px, transparent 3px 7px), var(--o-lilac);
+  box-shadow: inset 0 0 0 3px #fbfaf6; animation: o-board-cover 1s both; animation-delay: var(--d, 0ms);
+}
+@keyframes o-board-up {
+  0% { opacity: 0; transform: perspective(500px) translateY(-26px) rotateY(180deg); animation-timing-function: ease-out; }
+  35% { opacity: 1; transform: perspective(500px) translateY(0) rotateY(180deg); }
+  50% { transform: perspective(500px) translateY(0) rotateY(180deg); animation-timing-function: ease-in-out; }
+  100% { transform: perspective(500px) translateY(0) rotateY(0deg); }
+}
+@keyframes o-board-cover { 0%, 74% { opacity: 1; } 75%, 100% { opacity: 0; } }
+/* The river: it lands face down, lifts with a glow, wobbles, turns over slowly while held up, then settles. */
+.online .o-pc.up.river { animation: o-board-river 2s both; }
+.online .o-pc.up.river::after { animation: o-board-cover-river 2s both; animation-delay: var(--d, 0ms); }
+@keyframes o-board-river {
+  0% { opacity: 0; transform: perspective(600px) translateY(-40px) rotateY(180deg) rotateZ(0deg) scale(0.9); filter: drop-shadow(0 0 0 rgb(143 240 191 / 0)); animation-timing-function: ease-out; }
+  18% { opacity: 1; transform: perspective(600px) translateY(0) rotateY(180deg) rotateZ(0deg) scale(1); filter: drop-shadow(0 0 0 rgb(143 240 191 / 0)); animation-timing-function: ease-in-out; }
+  34% { transform: perspective(600px) translateY(-10px) rotateY(180deg) rotateZ(0deg) scale(1.14); filter: drop-shadow(0 0 12px rgb(143 240 191 / 0.6)); }
+  40% { transform: perspective(600px) translateY(-10px) rotateY(180deg) rotateZ(-3deg) scale(1.14); }
+  46% { transform: perspective(600px) translateY(-10px) rotateY(180deg) rotateZ(3deg) scale(1.14); }
+  52% { transform: perspective(600px) translateY(-10px) rotateY(180deg) rotateZ(0deg) scale(1.14); animation-timing-function: ease-in-out; }
+  88% { transform: perspective(600px) translateY(-10px) rotateY(0deg) rotateZ(0deg) scale(1.14); filter: drop-shadow(0 0 16px rgb(143 240 191 / 0.7)); animation-timing-function: ease-out; }
+  100% { transform: perspective(600px) translateY(0) rotateY(0deg) rotateZ(0deg) scale(1); filter: drop-shadow(0 0 0 rgb(143 240 191 / 0)); }
+}
+@keyframes o-board-cover-river { 0%, 69% { opacity: 1; } 70%, 100% { opacity: 0; } }
 .online .o-pot { font-size: 14px; color: var(--o-muted); }
 .online .o-pot strong { color: var(--o-text); font-weight: 500; font-family: var(--mono); }
+.online .o-result { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; }
+.online .o-peek { min-height: 33px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--o-surface-2); color: var(--o-text); font-size: 13px; font-weight: 500; }
 .online .o-banner { padding: 8px 14px; border-radius: 999px; background: var(--o-mint); color: var(--o-ink); font-size: 13px; font-weight: 500; text-align: center; max-width: 100%; animation: o-pop 0.3s ease-out both; }
 @keyframes o-pop { from { transform: scale(0.9); opacity: 0; } }
 
@@ -207,10 +250,11 @@ html.online-mode, html.online-mode body { background: #050505; }
 .online .o-seat .o-cards { position: absolute; top: -4px; left: calc(50% + 24px); }
 .online .o-seat .o-cards .o-pc + .o-pc { margin-left: -14px; }
 /* Hands shown at showdown sit side by side so both cards can be read. */
-.online .o-seat .o-cards .o-pc:not(.back) + .o-pc { margin-left: 2px; }
+.online .o-seat .o-cards .o-pc:not(.back) + .o-pc { margin-left: 8px; }
 .online .o-seat .tag { padding: 1px 7px; border-radius: 999px; font-size: 10px; font-weight: 600; letter-spacing: 0.04em; background: var(--o-surface-2); color: var(--o-muted); }
 .online .o-seat .tag.hot { background: var(--o-peach); color: var(--o-ink); }
 .online .o-seat .tag.win { background: var(--o-mint); color: var(--o-ink); font-family: var(--mono); letter-spacing: 0; animation: o-pop 0.3s 0.5s ease-out both; }
+.online .o-seat .tag.lose { background: #3a1d16; color: var(--o-neg); font-family: var(--mono); letter-spacing: 0; }
 .online .o-seat .last { font-size: 11px; color: var(--o-muted); }
 .online .o-seat .last.pop { color: var(--o-text); animation: o-pop 0.25s ease-out both; }
 .online .o-clock { width: 56px; height: 3px; border-radius: 2px; overflow: hidden; background: var(--o-line); }
@@ -234,8 +278,8 @@ html.online-mode, html.online-mode body { background: #050505; }
 .online .o-blind.bb { background: var(--o-lilac); }
 
 /* Hero area and actions */
-.online .o-hand { display: flex; align-items: center; justify-content: center; gap: 14px; min-height: 92px; }
-.online .o-hand .o-cards { gap: 6px; }
+.online .o-hand { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 14px; min-height: 92px; margin-top: 6px; }
+.online .o-hand .o-cards { gap: 10px; }
 .online .o-hand-name { font-size: 15px; color: var(--o-muted); }
 .online .o-actions { position: sticky; bottom: 0; z-index: 4; display: flex; flex-direction: column; gap: 10px; padding: 10px 0 calc(10px + env(safe-area-inset-bottom)); background: linear-gradient(to bottom, transparent, var(--o-bg) 18px); }
 .online .o-action-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
@@ -256,6 +300,11 @@ html.online-mode, html.online-mode body { background: #050505; }
 .online .o-slider { width: 100%; accent-color: #8ccfff; height: 28px; }
 .online .o-wait { min-height: 58px; display: flex; align-items: center; justify-content: center; color: var(--o-muted); font-size: 15px; }
 .online .o-toolbar { display: flex; flex-wrap: wrap; gap: 8px; }
+/* Between hands at a live table: equal buttons in a grid; joining, starting and the wait line take a full row. */
+.online .o-table-tools { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 8px; }
+.online .o-table-tools .o-btn { min-height: 48px; padding: 0 12px; font-size: 15px; }
+.online .o-table-tools > .block, .online .o-table-tools > .o-wait { grid-column: 1 / -1; }
+.online .o-table-tools > .o-wait { min-height: 0; }
 
 /* Coach */
 .online .o-coach { display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 22px; background: var(--o-surface); }
@@ -379,18 +428,21 @@ html.online-mode, html.online-mode body { background: #050505; }
   .online .o-felt { margin-top: 18px; }
   .online .o-middle { top: 41%; }
   .online .o-seat .o-cards { top: -28px; left: 50%; transform: translateX(-50%); z-index: 1; }
+  /* Live table: players and chat come after the buttons; between hands the buttons follow the cards instead of covering them. */
+  .online .o-game.live > .o-side { order: 1; }
+  .online .o-actions.tools { position: static; background: none; }
 }
 @media (max-width: 420px) {
-  .online .o-board { gap: 4px; }
+  .online .o-board { gap: 8px; }
   .online .o-board .o-pc { width: 41px; height: 58px; padding: 4px; }
   .online .o-board .o-pc .r { font-size: 16px; }
   .online .o-board .o-pc .s { font-size: 23px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .online .o-pc, .online .o-banner, .online .o-feedback, .online .o-sheet > div, .online .o-bet, .online .o-bet > span,
+  .online .o-pc, .online .o-pc.up, .online .o-pc.up.river, .online .o-banner, .online .o-feedback, .online .o-sheet > div, .online .o-bet, .online .o-bet > span,
   .online .o-seat .last.pop, .online .o-seat .tag.win, .online .o-seat.turn .o-avatar { animation: none; }
-  .online .o-bet.o-move { display: none; }
+  .online .o-bet.o-move, .online .o-fly, .online .o-pc.up::after { display: none; }
   .online .o-mode, .online .o-seat { transition: none; }
 }
 
@@ -419,10 +471,10 @@ html.online-mode, html.online-mode body { background: #050505; }
   .online .o-game > :not(.o-side) { grid-column: 1; }
   .online .o-game > .o-side { grid-column: 2; grid-row: 1 / span 3; position: sticky; top: 24px; max-height: calc(100dvh - 48px); overflow-y: auto; }
   .online .o-game.solo { grid-template-columns: minmax(0, 1fr); width: 100%; max-width: 1040px; margin: 0 auto; }
-  /* Header, hole cards and buttons take about 330px; the table gets the rest at 16:10. */
-  .online .o-felt { aspect-ratio: 16 / 10; width: min(100%, calc((100dvh - 330px) * 1.6)); min-width: 560px; }
+  /* Header, hole cards and buttons take about 350px; the table gets the rest at 16:10. */
+  .online .o-felt { aspect-ratio: 16 / 10; width: min(100%, calc((100dvh - 350px) * 1.6)); min-width: 560px; }
   .online .o-felt::before { inset: 13% 9%; }
-  .online .o-hand { min-height: 100px; margin-top: -8px; }
+  .online .o-hand { min-height: 100px; margin-top: 14px; }
   .online .o-actions { width: 100%; max-width: 640px; margin: 0 auto; }
   /* The drill shows feedback under the table, so the table leaves room for it. */
   .online .o-game.drill .o-felt { width: min(100%, calc((100dvh - 420px) * 1.6)); }

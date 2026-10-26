@@ -16,7 +16,7 @@ import { HistoryList } from '../components/HandReplay.tsx';
 import { CoachPanel, FeedbackLine, HandReview, LeakList, RevealList, type ReviewedFeedback } from '../components/CoachPanel.tsx';
 import { OHeader, Sheet, SoundToggle } from '../components/Nav.tsx';
 import { PlayingCard } from '../components/PlayingCard.tsx';
-import { dealDelay, TableFelt } from '../components/TableFelt.tsx';
+import { dealDelay, outcomeOf, TableFelt } from '../components/TableFelt.tsx';
 import { chips, signedBb } from '../format.ts';
 import { handName, useOT } from '../i18n.ts';
 import { usePrefs, setPref } from '../prefs.ts';
@@ -30,7 +30,7 @@ const BB = 20;
 const STACKS = [50, 100, 200];
 const OPPONENTS = [1, 2, 3, 4, 5];
 /** Practice deals the next hand this long after the winner is shown. */
-const NEXT_HAND_MS = 3200;
+const NEXT_HAND_MS = 7000;
 /** A bot's thinking time per move (ms), before a random part of up to 80% on top. */
 const THINK: Record<Action['type'], number> = { fold: 650, check: 600, call: 950, raise: 1300 };
 const YOU = 'you';
@@ -348,6 +348,7 @@ function BotGame({ mode, setup, saved, onAgain, onExit }: { mode: BotMode; setup
   const myCards = view && view.you !== null ? view.players[view.you].cards : null;
   const myScore = myCards && view && view.board.length ? describe(evaluate([...myCards, ...view.board])) : null;
   const iFolded = view && view.you !== null ? view.players[view.you].folded : false;
+  const myOutcome = view && view.you !== null ? outcomeOf(view, view.you) : null;
   const net = me.stack - me.bought;
   const actor = view && view.toAct !== null && !view.result ? view.players[view.toAct] : null;
   const waitingFor = actor && actor.id !== YOU ? actor.name : null;
@@ -361,13 +362,14 @@ function BotGame({ mode, setup, saved, onAgain, onExit }: { mode: BotMode; setup
       </OHeader>
 
       <div className={`o-game${mode === 'practice' ? ' solo' : ''}`}>
-        <TableFelt maxSeats={players.length} seats={seats} hand={feltView} youSeat={0} format={chips} revealFolded={showAll} rest={restShown && hand?.result ? remainingBoard(hand) : null} />
+        <TableFelt maxSeats={players.length} seats={seats} hand={feltView} youSeat={0} format={chips} revealFolded={showAll}
+          rest={restShown && hand?.result ? remainingBoard(hand) : null} onShowRest={canRest ? () => setRestShown(true) : undefined} />
 
         <div className="o-hand">
           {myCards && (
             <span className="o-cards">
               {[...myCards].sort((a, b) => b - a).map((c, i) => (
-                <PlayingCard key={`${view!.handNo}-${i}`} card={c} size="lg" dim={iFolded} delay={dealDelay(view!, view!.you!, i)} />
+                <PlayingCard key={`${view!.handNo}-${i}`} card={c} size="lg" dim={iFolded} win={myOutcome === 'win'} lose={myOutcome === 'lose'} delay={dealDelay(view!, view!.you!, i)} />
               ))}
             </span>
           )}
@@ -403,19 +405,15 @@ function BotGame({ mode, setup, saved, onAgain, onExit }: { mode: BotMode; setup
           ) : yourTurn && view ? (
             <ActionBar view={view} format={chips} onAct={onAct} />
           ) : view?.result && settled && mode === 'learn' ? (
-            <div className="o-action-row" style={{ gridTemplateColumns: hand!.board.length < 5 ? undefined : '1fr 1fr' }}>
+            <div className="o-action-row" style={{ gridTemplateColumns: '1fr 1fr' }}>
               <button type="button" className="o-act" aria-pressed={revealed} onClick={() => setRevealed(!revealed)}>
                 {revealed ? t.reveal.hide : t.reveal.show}<kbd>V</kbd>
               </button>
-              {hand!.board.length < 5 && (
-                <button type="button" className="o-act" aria-pressed={restShown} onClick={() => setRestShown(!restShown)}>{t.table.showRest}</button>
-              )}
               <button type="button" className="o-act main" onClick={deal}>{t.bots.nextHand}<kbd>↵</kbd></button>
             </div>
           ) : (
             <>
-              <p className="o-wait" style={pre.available || canRest ? { minHeight: 0 } : undefined}>{view?.result ? t.table.waiting : waitingFor ? t.table.thinking(waitingFor) : '…'}</p>
-              {canRest && <button type="button" className="o-btn ghost" onClick={() => setRestShown(true)}>{t.table.showRest}</button>}
+              <p className="o-wait" style={pre.available ? { minHeight: 0 } : undefined}>{view?.result ? t.table.waiting : waitingFor ? t.table.thinking(waitingFor) : '…'}</p>
               <PreActions state={pre} format={chips} />
             </>
           )}

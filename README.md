@@ -106,7 +106,7 @@ Admins can also download everything at once: **Settings → Admin → Download b
 | `DB_FILE` | `data/poker.db` (`/data/poker.db` in Docker) | SQLite file. |
 | `BACKUP_DIR` / `BACKUP_KEEP` | `<db dir>/backups` / `30` | Daily backups; `BACKUP_KEEP=0` turns them off. |
 | `ONLINE_DB_FILE` | `online.db` next to `DB_FILE` | Database of the online section (accounts, tables, hands). Must differ from `DB_FILE`. |
-| `ONLINE_ACTION_MS` / `ONLINE_NEXT_HAND_MS` | `30000` / `4000` | Time per decision at live tables, and the pause between hands. |
+| `ONLINE_ACTION_MS` / `ONLINE_NEXT_HAND_MS` | `30000` / `12000` | Time per decision at live tables, and the pause between hands. |
 | `CORS_ORIGIN` | `*` | Origins allowed to call the API. |
 
 ## API

@@ -24,10 +24,12 @@ export function HandReplay({ record, viewerId, maxSeats, avatars, format, onClos
 }) {
   const t = useOT();
   useEscape(onClose);
-  const frames = useMemo(() => {
+  // Each step waits as long as at the table, so streets are burned and turned up the same way.
+  const steps = useMemo(() => {
     const { start, end } = replayViews(redact(record, viewerId), viewerId);
-    return [start, ...stage(start, end).map((f) => f.view)];
+    return [{ view: start, delay: 0 }, ...stage(start, end)];
   }, [record, viewerId]);
+  const frames = useMemo(() => steps.map((s) => s.view), [steps]);
   const [i, setI] = useState(0);
   const [playing, setPlaying] = useState(true);
   const view = frames[i];
@@ -38,9 +40,9 @@ export function HandReplay({ record, viewerId, maxSeats, avatars, format, onClos
     const timer = setTimeout(() => {
       soundsFor(frames[i], frames[i + 1], viewerId);
       setI(i + 1);
-    }, Math.max(MIN_STEP_MS, i === 0 ? 700 : 0));
+    }, Math.max(MIN_STEP_MS, i === 0 ? 700 : 0, steps[i + 1].delay));
     return () => clearTimeout(timer);
-  }, [playing, i, frames, viewerId]);
+  }, [playing, i, frames, steps, viewerId]);
 
   const seats: (SeatInfo | null)[] = Array.from({ length: maxSeats }, () => null);
   for (const p of record.players) seats[p.seat] = { name: p.name, avatar: avatars?.[p.id] ?? '🙂', stack: p.stack };
