@@ -109,6 +109,11 @@ function LiveTable({ code, onClosed }: { code: string; onClosed: () => void }) {
   }, [bubbles.length, now]);
   const unread = chat.filter((m) => m.id > readUpTo && String(m.accountId) !== meId).length;
 
+  const restShown = Boolean(view?.rest);
+  useEffect(() => {
+    if (restShown) play('flop');
+  }, [restShown]);
+
   const history = useOnline<HistoryHand[]>(panel === 'history' ? `/tables/${code}/hands` : null);
 
   if (!view) return <main className="o-page bare"><OHeader title={code} back="/online/tables" /><OError error={streamError} /><OLoading /></main>;
@@ -132,6 +137,10 @@ function LiveTable({ code, onClosed }: { code: string; onClosed: () => void }) {
   const acting = running && hand!.toAct !== null ? hand!.players[hand!.toAct!].seat : null;
   const clock = view.deadline && acting !== null ? { seat: acting, end: view.deadline - offset, total: ACTION_MS } : null;
   const actorName = acting !== null && acting !== view.you ? view.seats[acting]?.account.username : null;
+  // Between hands, until the next deal: turn your cards up, or see the board a hand that ended early would have dealt.
+  const ended = settled && hand?.result && hand.you !== null ? hand : null;
+  const canShow = Boolean(ended && !ended.result!.shown[ended.players[ended.you!].id]);
+  const canRest = Boolean(ended && ended.board.length < 5 && !view.rest);
 
   const seats: (SeatInfo | null)[] = view.seats.map((s) => s && {
     name: s.account.username,
@@ -188,6 +197,7 @@ function LiveTable({ code, onClosed }: { code: string; onClosed: () => void }) {
           format={fmt}
           clock={clock}
           bubbles={bubbles}
+          rest={view.rest}
           onTakeSeat={view.you === null && !view.closing ? (seat) => post('join', { seat }) : undefined}
           idle={view.started ? t.table.waiting : t.live.startHint}
         />
@@ -249,6 +259,8 @@ function LiveTable({ code, onClosed }: { code: string; onClosed: () => void }) {
             </>
           ) : (
             <div className="o-toolbar">
+              {canShow && <button type="button" className="o-btn" disabled={busy} onClick={() => post('show')}>{t.table.showCards}</button>}
+              {canRest && <button type="button" className="o-btn ghost" disabled={busy} onClick={() => post('rest')}>{t.table.showRest}</button>}
               {view.you === null && !view.closing && (
                 <button type="button" className="o-btn block" disabled={busy || (seated >= view.maxSeats && !view.seats.some((x) => x?.account.bot))} onClick={() => post('join')}>{t.live.join(fmt(view.buyIn))}</button>
               )}

@@ -325,6 +325,18 @@ function finish(s: HandState, showdown: boolean) {
   s.result = { showdown, pots, won, net, shown, scores };
 }
 
+/** The board cards a hand that ended early would have dealt next, burns included, as `endRound` deals them. */
+export function remainingBoard(s: Pick<HandState, 'board' | 'deck'>): Card[] {
+  const deck = [...s.deck];
+  const out: Card[] = [];
+  while (s.board.length + out.length < 5 && deck.length) {
+    deck.pop(); // burn
+    const count = s.board.length + out.length === 0 ? 3 : 1;
+    for (let k = 0; k < count; k++) out.push(deck.pop()!);
+  }
+  return out;
+}
+
 export type Position = 'button' | 'sb' | 'bb' | 'early' | 'middle' | 'late';
 
 export function positionOf(s: { players: unknown[]; button: number; sbIndex: number; bbIndex: number }, i: number): Position {

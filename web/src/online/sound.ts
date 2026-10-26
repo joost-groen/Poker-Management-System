@@ -180,5 +180,6 @@ export function soundsFor(prev: HandView | null, next: HandView | null, me: stri
     const won = me !== null && (next.result.net[me] ?? 0) > 0;
     play(won ? 'win' : 'pot');
   }
+  if (next.result && prev.result && Object.keys(next.result.shown).length > Object.keys(prev.result.shown).length) play('card');
   if (next.legal && !prev.legal) play('turn');
 }

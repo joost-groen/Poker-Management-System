@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { newDeck, parseCards, type Card } from '../../shared/poker/cards.ts';
 import { equity } from '../../shared/poker/equity.ts';
 import { describe, evaluate } from '../../shared/poker/evaluate.ts';
-import { act, legalActions, PokerError, potTotal, startHand, type HandState } from '../../shared/poker/holdem.ts';
+import { act, legalActions, PokerError, potTotal, remainingBoard, startHand, type HandState } from '../../shared/poker/holdem.ts';
 import { viewFor } from '../../shared/poker/view.ts';
 
 const rank = (s: string) => evaluate(parseCards(s));
@@ -52,6 +52,18 @@ test('hand ranking: categories, kickers, wheel and ties', () => {
   assert.equal(rank('2h 3h As Ks Qs Js Ts'), rank('4d 5d As Ks Qs Js Ts'), 'board plays');
   assert.deepEqual(describe(rank('Ah 2d 3c 4s 5h 9d Kc')), { category: 'straight', ranks: [3] });
   assert.deepEqual(describe(rank('7h 7d 2c 2s Kh Kd 3c')), { category: 'twoPair', ranks: [11, 5, 1] });
+});
+
+test('the board a hand would have dealt is the one it deals when played out', () => {
+  for (let street = 0; street < 4; street++) {
+    let s = hand([100, 100, 100]);
+    // Check or call around until `street` streets are dealt, then compare what is left with playing on.
+    while (!s.result && ['preflop', 'flop', 'turn', 'river'].indexOf(s.street) < street) s = act(s, s.toAct!, { type: 'call' });
+    const rest = remainingBoard(s);
+    assert.equal(s.board.length + rest.length, 5);
+    while (!s.result) s = act(s, s.toAct!, { type: 'call' });
+    assert.deepEqual(s.board.slice(5 - rest.length), rest);
+  }
 });
 
 test('side pots with three all-ins of different sizes', () => {

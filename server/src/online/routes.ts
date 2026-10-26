@@ -89,6 +89,14 @@ online.post('/tables/:code/action', (req, res) => {
   res.json(tables.action(code(req), req.account!, req.body ?? {}));
 });
 
+online.post('/tables/:code/show', (req, res) => {
+  res.json(tables.showCards(code(req), req.account!));
+});
+
+online.post('/tables/:code/rest', (req, res) => {
+  res.json(tables.showRest(code(req), req.account!));
+});
+
 online.post('/tables/:code/rebuy', (req, res) => {
   res.json(tables.rebuy(code(req), req.account!));
 });

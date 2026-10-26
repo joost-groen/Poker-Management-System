@@ -3,9 +3,9 @@ import {
   REACTIONS, VOICE_MAX_CHARS, VOICE_MAX_MS, type Account, type ChatMessage, type LiveTableView, type SeatView, type StakesMode,
   type TableStatus, type TableSummary,
 } from '../../../shared/online.ts';
-import { handFlags, recordOf } from '../../../shared/poker/history.ts';
+import { handFlags, recordOf, type HandRecord } from '../../../shared/poker/history.ts';
 import { BOT_LEVELS, decide, type BotLevel } from '../../../shared/poker/bots.ts';
-import { act, legalActions, startHand, type Action, type HandState } from '../../../shared/poker/holdem.ts';
+import { act, legalActions, remainingBoard, startHand, type Action, type HandState } from '../../../shared/poker/holdem.ts';
 import { replayMs, viewFor } from '../../../shared/poker/view.ts';
 import { botAccount, getAccount } from './auth.ts';
 import { odb, otx } from './db.ts';
@@ -68,6 +68,10 @@ interface Live {
   handNo: number;
   seats: (Seat | null)[];
   hand: HandState | null;
+  /** The last hand's row in the hands table, once it has ended. */
+  handId: number | null;
+  /** Someone asked to see the board the last hand would have dealt. */
+  rest: boolean;
   deadline: number | null;
   actionTimer: NodeJS.Timeout | null;
   nextTimer: NodeJS.Timeout | null;
@@ -119,7 +123,7 @@ function load(code: string): Live {
     id: row.id, code: row.code, name: row.name, mode: row.mode, sb: row.sb, bb: row.bb, buyIn: row.buy_in,
     maxSeats: row.max_seats, hostId: row.host_id, status: row.status, started: row.started === 1, closing: false,
     createdAt: row.created_at, closedAt: row.closed_at, button: row.button, handNo: row.hand_no,
-    seats: Array.from({ length: row.max_seats }, () => null), hand: null, deadline: null, actionTimer: null, nextTimer: null,
+    seats: Array.from({ length: row.max_seats }, () => null), hand: null, handId: null, rest: false, deadline: null, actionTimer: null, nextTimer: null,
     listeners: new Set(), chat: [], chatSeq: 0, chatTimes: new Map(),
   };
   const seats = odb.prepare('SELECT seat, account_id, stack, sitting_out FROM seats WHERE table_id = ?').all(row.id) as {
@@ -181,6 +185,7 @@ export function viewOf(t: Live, accountId: number): LiveTableView {
     code: t.code, name: t.name, mode: t.mode, sb: t.sb, bb: t.bb, buyIn: t.buyIn, maxSeats: t.maxSeats, status: t.status,
     started: t.started, createdAt: t.createdAt, closedAt: t.closedAt, hostId: t.hostId, closing: t.closing, seats,
     hand: t.hand ? viewFor(t.hand, String(accountId)) : null,
+    rest: t.rest && t.hand?.result ? remainingBoard(t.hand) : null,
     you: seatOf(t, accountId)?.seat ?? null,
     deadline: t.deadline, serverTime: Date.now(),
   };
@@ -260,6 +265,8 @@ function deal(t: Live) {
   // Bots never play on by themselves: someone real has to be dealt in.
   if (players.length < 2 || players.every((s) => s.account.bot)) return broadcast(t);
   t.handNo++;
+  t.handId = null;
+  t.rest = false;
   t.hand = startHand({
     players: players.map((s) => ({ id: String(s.account.id), name: s.account.username, seat: s.seat, stack: s.stack })),
     previousButton: t.button,
@@ -340,7 +347,7 @@ function endHand(t: Live) {
     }
     saveSeats(t);
     // The full record, hole cards included: the history API only ever hands them to their owner or after showdown.
-    const handId = Number(odb.prepare('INSERT INTO hands (table_id, hand_no, data) VALUES (?, ?, ?)').run(t.id, hand.handNo, JSON.stringify(record)).lastInsertRowid);
+    const handId = t.handId = Number(odb.prepare('INSERT INTO hands (table_id, hand_no, data) VALUES (?, ?, ?)').run(t.id, hand.handNo, JSON.stringify(record)).lastInsertRowid);
     const hp = odb.prepare(`INSERT INTO hand_players (hand_id, account_id, net, vpip, pfr, three_bet_chance, three_bet, saw_flop, wtsd, wsd)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     for (const p of hand.players) {
@@ -497,6 +504,44 @@ export function action(code: string, account: Account, body: { type?: unknown; t
   t.hand = act(t.hand, String(account.id), a);
   s.timeouts = 0;
   advance(t);
+  return viewOf(t, account.id);
+}
+
+/** The hand that just ended, between hands, if the account was dealt in. */
+function endedHand(t: Live, accountId: number): HandState {
+  if (t.hand && !t.hand.result) throw new OnlineError(409, 'hand_running', 'Wait for the hand to finish');
+  if (!t.hand?.players.some((p) => p.id === String(accountId))) throw new OnlineError(409, 'not_in_hand', 'You were not in this hand');
+  return t.hand;
+}
+
+/** Until the next hand is dealt: turn your hole cards up for the table, and in the hand history. */
+export function showCards(code: string, account: Account): LiveTableView {
+  const t = openTable(code);
+  const hand = endedHand(t, account.id);
+  const id = String(account.id);
+  const result = hand.result!;
+  if (!result.shown[id]) {
+    const cards = hand.players.find((p) => p.id === id)!.cards;
+    t.hand = { ...hand, result: { ...result, shown: { ...result.shown, [id]: [...cards] } } };
+    const row = t.handId === null ? undefined : odb.prepare('SELECT data FROM hands WHERE id = ?').get(t.handId) as { data: string } | undefined;
+    if (row) {
+      const record = JSON.parse(row.data) as HandRecord;
+      for (const p of record.players) if (p.id === id) p.shown = true;
+      odb.prepare('UPDATE hands SET data = ? WHERE id = ?').run(JSON.stringify(record), t.handId);
+    }
+    broadcast(t);
+  }
+  return viewOf(t, account.id);
+}
+
+/** Until the next hand is dealt: show everyone the board a hand that ended early would have dealt. */
+export function showRest(code: string, account: Account): LiveTableView {
+  const t = openTable(code);
+  const hand = endedHand(t, account.id);
+  if (hand.board.length < 5 && !t.rest) {
+    t.rest = true;
+    broadcast(t);
+  }
   return viewOf(t, account.id);
 }
 

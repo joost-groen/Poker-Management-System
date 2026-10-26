@@ -3,7 +3,7 @@ import type { Rng } from '../../../../shared/poker/cards.ts';
 import { BOT_LEVELS, BOT_STYLE, decide, type BotLevel } from '../../../../shared/poker/bots.ts';
 import { advise, review, type Leak } from '../../../../shared/poker/coach.ts';
 import { describe, evaluate } from '../../../../shared/poker/evaluate.ts';
-import { act, startHand, type Action, type HandState } from '../../../../shared/poker/holdem.ts';
+import { act, remainingBoard, startHand, type Action, type HandState } from '../../../../shared/poker/holdem.ts';
 import { viewFor } from '../../../../shared/poker/view.ts';
 import { Info } from '../../components/Info.tsx';
 import { useAccount } from '../api.ts';
@@ -224,6 +224,7 @@ function BotGame({ mode, setup, saved, onAgain, onExit }: { mode: BotMode; setup
   const [showHistory, setShowHistory] = useState(false);
   /** Learn: the opponents' cards turned up after the hand. */
   const [revealed, setRevealed] = useState(false);
+  const [restShown, setRestShown] = useState(false);
 
   const me = players[0];
 
@@ -246,6 +247,7 @@ function BotGame({ mode, setup, saved, onAgain, onExit }: { mode: BotMode; setup
     setReviewed([]);
     setLastFeedback(null);
     setRevealed(false);
+    setRestShown(false);
     setHand(h);
   }, [start]);
 
@@ -322,6 +324,8 @@ function BotGame({ mode, setup, saved, onAgain, onExit }: { mode: BotMode; setup
   // Learn: once the hand is over and on screen, every opponent's cards can be turned up.
   const showAll = mode === 'learn' && revealed && Boolean(hand?.result && view?.result && settled);
   const feltView = showAll && view && hand ? { ...view, players: view.players.map((p, i) => ({ ...p, cards: p.cards ?? hand.players[i].cards })) } : view;
+  // After a hand that ended early: the board it would have dealt.
+  const canRest = Boolean(hand?.result && view?.result && settled && hand.board.length < 5 && !restShown && !ended);
   // Learn: Enter deals the next hand once the review is up.
   const canDeal = Boolean(view?.result && settled && mode === 'learn' && !busted && !ended);
   useEffect(() => {
@@ -357,7 +361,7 @@ function BotGame({ mode, setup, saved, onAgain, onExit }: { mode: BotMode; setup
       </OHeader>
 
       <div className={`o-game${mode === 'practice' ? ' solo' : ''}`}>
-        <TableFelt maxSeats={players.length} seats={seats} hand={feltView} youSeat={0} format={chips} revealFolded={showAll} />
+        <TableFelt maxSeats={players.length} seats={seats} hand={feltView} youSeat={0} format={chips} revealFolded={showAll} rest={restShown && hand?.result ? remainingBoard(hand) : null} />
 
         <div className="o-hand">
           {myCards && (
@@ -399,15 +403,19 @@ function BotGame({ mode, setup, saved, onAgain, onExit }: { mode: BotMode; setup
           ) : yourTurn && view ? (
             <ActionBar view={view} format={chips} onAct={onAct} />
           ) : view?.result && settled && mode === 'learn' ? (
-            <div className="o-action-row" style={{ gridTemplateColumns: '1fr 1fr' }}>
+            <div className="o-action-row" style={{ gridTemplateColumns: hand!.board.length < 5 ? undefined : '1fr 1fr' }}>
               <button type="button" className="o-act" aria-pressed={revealed} onClick={() => setRevealed(!revealed)}>
                 {revealed ? t.reveal.hide : t.reveal.show}<kbd>V</kbd>
               </button>
+              {hand!.board.length < 5 && (
+                <button type="button" className="o-act" aria-pressed={restShown} onClick={() => setRestShown(!restShown)}>{t.table.showRest}</button>
+              )}
               <button type="button" className="o-act main" onClick={deal}>{t.bots.nextHand}<kbd>↵</kbd></button>
             </div>
           ) : (
             <>
-              <p className="o-wait" style={pre.available ? { minHeight: 0 } : undefined}>{view?.result ? t.table.waiting : waitingFor ? t.table.thinking(waitingFor) : '…'}</p>
+              <p className="o-wait" style={pre.available || canRest ? { minHeight: 0 } : undefined}>{view?.result ? t.table.waiting : waitingFor ? t.table.thinking(waitingFor) : '…'}</p>
+              {canRest && <button type="button" className="o-btn ghost" onClick={() => setRestShown(true)}>{t.table.showRest}</button>}
               <PreActions state={pre} format={chips} />
             </>
           )}
