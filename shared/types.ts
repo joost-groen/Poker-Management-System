@@ -48,6 +48,10 @@ export interface Game {
   status: GameStatus;
   startedAt: string;
   closedAt: string | null;
+  /** First buy-in: when play really started (unlike startedAt, admins can't move it to another day). */
+  firstAt: string | null;
+  /** First buy-in to close; null while live. */
+  minutes: number | null;
   players: GamePlayer[];
   totals: { in: number; out: number; onTable: number };
   transfers: Transfer[];
@@ -65,6 +69,7 @@ export interface GameSummary {
   onTable: number;
   topName: string | null;
   topResult: number | null;
+  minutes: number | null;
 }
 
 export interface RankingRow {
@@ -79,7 +84,6 @@ export interface RankingRow {
 }
 
 export interface Ranking {
-  years: string[];
   rows: RankingRow[];
 }
 
@@ -90,11 +94,66 @@ export interface PlayerGame {
   buyins: number;
   cashouts: number;
   result: number;
+  /** Finish position in that game (1 = best result; ties share a place). */
+  place: number;
+  /** Players in that game. */
+  field: number;
 }
 
 export interface PlayerDetail extends Player {
   stats: RankingRow | null;
   games: PlayerGame[];
+  /** Games played vs. closed group games since the player's first one. */
+  attendance: { played: number; total: number };
+}
+
+/** One closed game in the Stats overview. */
+export interface StatsGame {
+  gameId: number;
+  startedAt: string;
+  players: number;
+  /** All buy-ins × buy-in: the money that went into the game. */
+  pot: number;
+  /** First entry to close; null when unknown or implausibly long (left open for over a day). */
+  minutes: number | null;
+}
+
+export type RecordKind =
+  | 'biggestWin'
+  | 'biggestLoss'
+  | 'biggestPot'
+  | 'mostRebuys'
+  | 'longestGame'
+  | 'mostWins'
+  | 'winStreak'
+  | 'lossStreak';
+
+export interface StatsRecord {
+  kind: RecordKind;
+  value: number;
+  playerId?: number;
+  name?: string;
+  gameId?: number;
+  startedAt?: string;
+}
+
+export interface StatsOverview {
+  /** Oldest first. */
+  games: StatsGame[];
+  /** Distinct players. */
+  players: number;
+  /** Σ pots. */
+  volume: number;
+  /** Σ positive results: the money that changed hands. */
+  won: number;
+  avgPot: number;
+  avgPlayers: number;
+  avgMinutes: number | null;
+  /** Games played per active player, most first. */
+  attendance: { playerId: number; name: string; games: number }[];
+  /** Running balance per group game (index 0 = before the first game) of the top players by net. */
+  race: { playerId: number; name: string; balance: number[] }[];
+  records: StatsRecord[];
 }
 
 export interface Meta {

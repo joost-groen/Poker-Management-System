@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { GameSummary } from '../../../shared/types.ts';
-import { Plus } from '../components/Icons.tsx';
+import { Plus, Screen } from '../components/Icons.tsx';
 import { ErrorLine, Header, Loading, TabBar } from '../components/Layout.tsx';
 import { day, eur, signed } from '../format.ts';
 import { useT } from '../i18n.ts';
@@ -16,6 +16,9 @@ export function Games() {
     <>
       <main className="page">
         <Header title={t.games.title}>
+          <a className="icon-btn mobile-only" href="#/tv" aria-label={t.nav.tv}>
+            <Screen />
+          </a>
           <a className="pill-btn" href="#/new">
             <Plus size={16} />
             {t.games.new}
@@ -53,7 +56,9 @@ export function Games() {
                   <a className="list-row" href={`#/game/${g.id}`}>
                     <span className="grow">
                       <span className="strong">{day(g.startedAt)}</span>
-                      <span className="muted small block">{t.games.summary(g.playerCount, eur(g.buyIn), g.buyins)}</span>
+                      <span className="muted small block">{t.games.summary(g.playerCount, eur(g.buyIn), g.buyins)}
+                        {g.minutes !== null && ` · ${t.stats.duration(g.minutes)}`}
+                      </span>
                     </span>
                     {g.topName && (
                       <span className="right">
@@ -73,14 +78,14 @@ export function Games() {
   );
 }
 
-export function Stat({ label, value, info }: { label: string; value: string; info?: ReactNode }) {
+export function Stat({ label, value, info, tone = '' }: { label: string; value: string; info?: ReactNode; tone?: string }) {
   return (
     <div className="stat">
       <span className="stat-label">
         {label}
         {info}
       </span>
-      <span className="num stat-value">{value}</span>
+      <span className={`num stat-value ${tone}`}>{value}</span>
     </div>
   );
 }

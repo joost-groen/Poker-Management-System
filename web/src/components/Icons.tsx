@@ -41,6 +41,9 @@ export const Cards = ({ size = 22 }) => (
 export const Bars = ({ size = 22 }) => (
   <svg {...base(size)} strokeWidth={1.8}><path d="M6 20V11M12 20V5M18 20v-6" /></svg>
 );
+export const Pulse = ({ size = 22 }) => (
+  <svg {...base(size)} strokeWidth={1.8}><path d="M3 19h18" /><path d="M4 15l5-6 4 4 7-8" /></svg>
+);
 export const Trash = ({ size = 18 }) => (
   <svg {...base(size)} strokeWidth={2}><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" /></svg>
 );

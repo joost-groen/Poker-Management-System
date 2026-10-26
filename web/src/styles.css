@@ -82,7 +82,8 @@ h1, h2 { margin: 0; }
   border-top: 1px solid var(--line);
   z-index: 5;
 }
-.tabbar a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 12px; font-weight: 500; color: var(--muted); }
+/* Five tabs on a 375px phone: "Einstellungen" only fits at 11px with slightly tighter letters. */
+.tabbar a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-width: 0; font-size: 11px; font-weight: 500; letter-spacing: -0.01em; white-space: nowrap; color: var(--muted); }
 .tabbar a[aria-current='page'] { color: var(--text); }
 
 .row { display: flex; align-items: center; }
@@ -245,6 +246,7 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
 /* Shared helpers */
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .brand, .tv-link, .desktop-only, .desktop-cell { display: none !important; }
+.tv-btn { display: inline-flex; align-items: center; gap: 8px; padding: 0 12px; }
 .game-grid { display: flex; flex-direction: column; gap: 20px; }
 .live-grid { display: grid; gap: 12px; }
 @keyframes flash { from { background: rgb(244 244 241 / 0.18); } to { background: transparent; } }
@@ -280,10 +282,41 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
   padding: 8px 12px; border-radius: 12px; background: var(--surface-2); font-size: 13px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.4);
 }
 
+/* Stats: bars, balance race, meters, records */
+.stats-grid { display: flex; flex-direction: column; gap: 22px; }
+.chart-bar { fill: rgb(244 244 241 / 0.32); }
+.chart-bar.on { fill: var(--text); }
+.chart-bar-pos { fill: rgb(126 226 168 / 0.4); }
+.chart-bar-pos.on { fill: var(--pos); }
+.chart-bar-neg { fill: rgb(255 155 122 / 0.4); }
+.chart-bar-neg.on { fill: var(--neg); }
+.race .chart { height: 240px; }
+.race-legend { display: flex; flex-wrap: wrap; gap: 6px; }
+.race-chip {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px;
+  border: 1px solid var(--line); border-radius: 999px; background: transparent; font-size: 13px;
+}
+.race-chip[aria-pressed='false'] { color: var(--muted); }
+.race-chip[aria-pressed='false'] .race-swatch { opacity: 0.25; }
+.race-swatch { flex: none; width: 10px; height: 10px; border-radius: 5px; }
+.race-readout { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.race-values { flex-basis: 100%; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 4px 16px; font-size: 14px; }
+.race-values li { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.race-line { fill: none; stroke-width: 2; stroke-linejoin: round; }
+.race-dot { stroke: var(--bg); stroke-width: 2; }
+.race-name { fill: var(--text); font: 12px var(--sans); }
+.meter { display: block; height: 4px; margin-top: 6px; border-radius: 2px; background: var(--surface-2); overflow: hidden; }
+.meter > span { display: block; height: 100%; border-radius: 2px; background: var(--text); }
+.form { display: flex; gap: 6px; }
+.form-chip { flex: 1; min-width: 0; padding: 8px 4px; border-radius: 12px; text-align: center; font-size: 13px; background: var(--surface); }
+.form-chip.pos { background: var(--pos-bg); }
+.form-chip.neg { background: var(--neg-bg); }
+
 /* Desktop: sidebar navigation, wider pages, two-column game screen */
 @media (min-width: 1024px) {
   .brand { display: block !important; padding: 4px 12px 24px; font-size: 18px; font-weight: 600; color: var(--text); }
   .tv-link { display: flex !important; margin-top: auto; }
+  .mobile-only { display: none !important; }
   .desktop-only { display: inline-flex !important; align-items: center; gap: 8px; }
   .desktop-cell { display: block !important; }
 
@@ -292,7 +325,7 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
     display: flex; flex-direction: column; gap: 4px;
     padding: 28px 12px; border-top: 0; border-right: 1px solid var(--line); background: var(--bg);
   }
-  .tabbar a { flex-direction: row; justify-content: flex-start; gap: 12px; height: 44px; padding: 0 12px; border-radius: 12px; font-size: 15px; }
+  .tabbar a { flex-direction: row; justify-content: flex-start; gap: 12px; height: 44px; padding: 0 12px; border-radius: 12px; font-size: 15px; letter-spacing: 0; }
   .tabbar a:hover { color: var(--text); }
   .tabbar a[aria-current='page'] { background: var(--surface); }
 
@@ -312,6 +345,7 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
 
   .stats-2 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .balance .chart { height: 280px; }
+  .stats-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 48px; align-items: start; }
   .list-row:hover, .rank-row:hover { background: rgb(244 244 241 / 0.03); }
   .live-card { min-height: 200px; }
 }
@@ -339,8 +373,8 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
   grid-template-rows: minmax(0, 1fr) minmax(24vh, auto);
   min-height: 0;
 }
-/* On a TV or desktop the whole view fits one screen; only phones scroll. */
-@media (min-width: 901px) {
+/* On a TV or desktop the whole view fits one screen; phones (also turned sideways) scroll. */
+@media (min-width: 901px) and (min-height: 600px) {
   .tv { height: 100dvh; overflow: hidden; }
 }
 .tv-players { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }

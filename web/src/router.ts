@@ -7,6 +7,7 @@ export type Route =
   | { name: 'game'; id: number }
   | { name: 'settle'; id: number }
   | { name: 'ranking' }
+  | { name: 'stats' }
   | { name: 'settings' }
   | { name: 'tv'; id: number | null }
   | { name: 'player'; id: number }
@@ -21,6 +22,8 @@ function parse(hash: string): Route {
       return { name: 'new' };
     case 'ranking':
       return { name: 'ranking' };
+    case 'stats':
+      return { name: 'stats' };
     case 'settings':
       return { name: 'settings' };
     case 'tv':

@@ -11,6 +11,7 @@ import { PlayerPage } from './pages/PlayerPage.tsx';
 import { Ranking } from './pages/Ranking.tsx';
 import { Settings } from './pages/Settings.tsx';
 import { Settle } from './pages/Settle.tsx';
+import { Stats } from './pages/Stats.tsx';
 import { Tv } from './pages/Tv.tsx';
 import { useRoute } from './router.ts';
 
@@ -39,6 +40,8 @@ export function App() {
       return <Settle key={route.id} id={route.id} />;
     case 'ranking':
       return <Ranking />;
+    case 'stats':
+      return <Stats />;
     case 'settings':
       return <Settings />;
     case 'tv':

@@ -61,10 +61,7 @@ function LiveGame({ g, busy, act, error }: ViewProps) {
     <>
       <main className="page with-footer">
         <Header title={day(g.startedAt)} back="/">
-          <a className="secondary small-btn desktop-only" href={`#/tv/${g.id}`}>
-            <Screen size={18} />
-            {t.nav.tv}
-          </a>
+          <TvButton id={g.id} />
           <span className="tag num">{eur(g.buyIn)}</span>
         </Header>
 
@@ -178,6 +175,15 @@ function ClosedGame({ g, busy, act, error }: ViewProps) {
         </Header>
 
         <div className="game-grid">
+        <div className="card stats">
+          <Stat label={t.game.length} value={g.minutes === null ? '–' : t.stats.duration(g.minutes)}
+            info={<Info label={t.stats.aboutLength}>{t.game.infoLength}</Info>} />
+          <Stat label={t.stats.volume} value={eur(g.totals.in)}
+            info={<Info label={t.stats.aboutVolume}>{t.game.infoVolume}</Info>} />
+          <Stat label={t.stats.won} value={eur(g.players.reduce((s, p) => s + Math.max(p.result ?? 0, 0), 0))}
+            info={<Info label={t.stats.aboutWon}>{t.game.infoWon}</Info>} />
+        </div>
+
         <section className="players-section">
           <div className="table-head">
             <span className="grow">{t.common.player}</span>
@@ -209,6 +215,17 @@ function ClosedGame({ g, busy, act, error }: ViewProps) {
       </main>
       <TabBar active="games" />
     </>
+  );
+}
+
+/** Opens the live game in TV mode: icon only on phones, with its label on desktop. */
+function TvButton({ id }: { id: number }) {
+  const t = useT();
+  return (
+    <a className="secondary small-btn tv-btn" href={`#/tv/${id}`} aria-label={t.nav.tv}>
+      <Screen size={18} />
+      <span className="desktop-only">{t.nav.tv}</span>
+    </a>
   );
 }
 

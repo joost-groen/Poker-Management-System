@@ -40,11 +40,14 @@ function useIdle() {
       clearTimeout(timer);
       timer = setTimeout(() => setIdle(true), IDLE_MS);
     };
+    // A tap on a phone brings the controls back too (touch sends no pointermove without a drag).
     window.addEventListener('pointermove', wake);
+    window.addEventListener('pointerdown', wake);
     window.addEventListener('keydown', wake);
     return () => {
       clearTimeout(timer);
       window.removeEventListener('pointermove', wake);
+      window.removeEventListener('pointerdown', wake);
       window.removeEventListener('keydown', wake);
     };
   }, []);
@@ -124,14 +127,17 @@ export function Tv({ id }: { id: number | null }) {
             <span className={g.status === 'live' ? 'live-dot' : 'muted'}>{g.status === 'live' ? t.tv.live : t.tv.final}</span>
             <span>{fullDay(g.startedAt)}</span>
             <span className="tag num">{eur(g.buyIn)}</span>
-            {g.status === 'live' && <span className="muted">{t.tv.playing(duration(now - new Date(g.startedAt).getTime()))}</span>}
+            {g.status === 'live' && <span className="muted">{t.tv.playing(duration(now - new Date(g.firstAt ?? g.startedAt).getTime()))}</span>}
           </>
         )}
         <span className="grow" />
         <span className="num tv-clock">{clock}</span>
         <div className="tv-controls">
           <Info label={t.tv.aboutTv}>{t.tv.infoTv}</Info>
-          <button className="icon-btn" type="button" aria-label={t.tv.fullscreen} onClick={fullscreen}><Expand /></button>
+          {/* iPhone Safari has no fullscreen for pages; there the button would do nothing. */}
+          {document.fullscreenEnabled && (
+            <button className="icon-btn" type="button" aria-label={t.tv.fullscreen} onClick={fullscreen}><Expand /></button>
+          )}
           <a className="icon-btn" href={gameId ? `#/game/${gameId}` : '#/'} aria-label={t.tv.exit}><Close /></a>
         </div>
       </header>

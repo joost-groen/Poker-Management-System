@@ -4,6 +4,7 @@ import { requireAdmin } from './auth.ts';
 import * as games from './games.ts';
 import { HttpError, date, int, name } from './http.ts';
 import * as players from './players.ts';
+import { stats } from './analytics.ts';
 import { playerDetail, ranking } from './stats.ts';
 
 export const api = Router();
@@ -107,9 +108,18 @@ api.delete('/games/:id/players/:playerId', requireAdmin, (req, res) => {
   res.json(games.removeFromGame(gameId(req), int(req.params.playerId, 'player', 1)));
 });
 
-// Ranking
+// Ranking and stats. `from` (ISO timestamp) limits both to games started since then; the client sends the start of
+// its local month, so late games land in the month they were played.
+
+const from = (req: Request) => {
+  const t = typeof req.query.from === 'string' ? Date.parse(req.query.from) : NaN;
+  return Number.isNaN(t) ? null : new Date(t).toISOString();
+};
 
 api.get('/ranking', (req, res) => {
-  const year = typeof req.query.year === 'string' && /^\d{4}$/.test(req.query.year) ? req.query.year : null;
-  res.json(ranking(year));
+  res.json(ranking(from(req)));
+});
+
+api.get('/stats', (req, res) => {
+  res.json(stats(from(req)));
 });

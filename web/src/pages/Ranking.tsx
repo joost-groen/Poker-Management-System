@@ -1,31 +1,22 @@
-import { useState } from 'react';
 import type { Ranking as RankingT } from '../../../shared/types.ts';
 import { Info } from '../components/Info.tsx';
 import { ErrorLine, Header, Loading, TabBar } from '../components/Layout.tsx';
+import { PeriodSwitch } from '../components/PeriodSwitch.tsx';
 import { signed, tone } from '../format.ts';
 import { useT } from '../i18n.ts';
+import { periodQuery, usePeriod } from '../period.ts';
 import { useApi } from '../useApi.ts';
 
 export function Ranking() {
   const t = useT();
-  const [year, setYear] = useState('');
-  const { data, error } = useApi<RankingT>(`/ranking${year ? `?year=${year}` : ''}`);
-  const years = data?.years ?? [];
+  const { data, error } = useApi<RankingT>(`/ranking${periodQuery(usePeriod())}`);
 
   return (
     <>
       <main className="page">
         <Header title={t.ranking.title} />
 
-        {(years.length > 0 || year) && (
-          <div className="segmented" role="group" aria-label={t.ranking.period}>
-            {['', ...years.slice(0, 3)].map((y) => (
-              <button key={y || 'all'} type="button" aria-pressed={year === y} onClick={() => setYear(y)}>
-                {y || t.ranking.allTime}
-              </button>
-            ))}
-          </div>
-        )}
+        <PeriodSwitch />
 
         <ErrorLine error={error} />
         {!data && !error && <Loading />}
