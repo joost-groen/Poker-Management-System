@@ -47,3 +47,14 @@ export function fullDay(iso: string): string {
 export function time(iso: string): string {
   return new Date(iso).toLocaleTimeString(dict().locale, { hour: '2-digit', minute: '2-digit' });
 }
+
+/** Month for chart labels: "Oct 26". */
+export function month(date: Date): string {
+  return date.toLocaleDateString(dict().locale, { month: 'short', year: '2-digit' });
+}
+
+/** 0.123 → "12%" (signed: "+12%"). */
+export function percent(share: number, sign = false): string {
+  const v = Math.round(share * 100);
+  return `${sign && v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v)}%`;
+}

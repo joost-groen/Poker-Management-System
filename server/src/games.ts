@@ -35,6 +35,7 @@ const lastEventStmt = db.prepare(`
   FROM events e JOIN players p ON p.id = e.player_id
   WHERE e.game_id = ? AND e.initial = 0
   ORDER BY e.id DESC LIMIT 1`);
+const firstEventStmt = db.prepare('SELECT MIN(created_at) AS firstAt FROM events WHERE game_id = ?');
 const insertEvent = db.prepare('INSERT INTO events (game_id, player_id, type, initial) VALUES (?, ?, ?, ?)');
 // A player whose last event is gone is no longer part of the game.
 const dropIfEmpty = db.prepare(`
@@ -64,6 +65,8 @@ export function getGame(id: number): Game {
   const players = (linesStmt.all(id) as unknown as LineRow[]).map((r) => line(g, r));
   const totalIn = players.reduce((s, p) => s + p.buyins, 0) * g.buy_in;
   const totalOut = players.reduce((s, p) => s + p.cashouts, 0) * g.buy_in;
+  const firstAt = (firstEventStmt.get(id) as { firstAt: string | null }).firstAt;
+  const minutes = g.closed_at && firstAt ? Math.max(0, Math.round((Date.parse(g.closed_at) - Date.parse(firstAt)) / 60_000)) : null;
   const transfers =
     g.status === 'closed'
       ? settle(players.map((p) => ({ id: p.playerId, name: p.name, balance: p.result ?? 0 })))
@@ -74,6 +77,8 @@ export function getGame(id: number): Game {
     status: g.status,
     startedAt: g.started_at,
     closedAt: g.closed_at,
+    firstAt,
+    minutes,
     players,
     totals: { in: totalIn, out: totalOut, onTable: totalIn - totalOut },
     transfers,
@@ -99,6 +104,7 @@ export function listGames(): GameSummary[] {
       onTable: g.totals.onTable,
       topName: top && top.result! > 0 ? top.name : null,
       topResult: top && top.result! > 0 ? top.result : null,
+      minutes: g.minutes,
     };
   });
 }

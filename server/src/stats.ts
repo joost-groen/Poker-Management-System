@@ -23,12 +23,15 @@ const resultsStmt = db.prepare(`
   JOIN game_players gp ON gp.game_id = g.id
   JOIN players p ON p.id = gp.player_id
   LEFT JOIN events e ON e.game_id = g.id AND e.player_id = gp.player_id
-  WHERE g.status = 'closed' AND (:year IS NULL OR substr(g.started_at, 1, 4) = :year)
+  WHERE g.status = 'closed' AND (:from IS NULL OR g.started_at >= :from)
   GROUP BY g.id, gp.player_id
   ORDER BY g.started_at DESC, g.id DESC`);
 
-function results(year: string | null): (PlayerGame & { playerId: number; name: string; archived: boolean })[] {
-  return (resultsStmt.all({ year }) as unknown as ResultRow[]).map((r) => ({
+export type Result = PlayerGame & { playerId: number; name: string; archived: boolean };
+
+/** Every player's line in every closed game since `from` (an ISO timestamp), newest first. */
+export function results(from: string | null): Result[] {
+  const rows = (resultsStmt.all({ from }) as unknown as ResultRow[]).map((r) => ({
     gameId: r.gameId,
     startedAt: r.startedAt,
     buyIn: r.buyIn,
@@ -38,11 +41,24 @@ function results(year: string | null): (PlayerGame & { playerId: number; name: s
     buyins: r.buyins,
     cashouts: r.cashouts,
     result: r.finalStack - (r.buyins - r.cashouts) * r.buyIn,
+    place: 0,
+    field: 0,
   }));
+
+  // Finish position within the game: 1 + players with a strictly better result, so ties share a place.
+  const byGame = new Map<number, typeof rows>();
+  for (const r of rows) byGame.set(r.gameId, [...(byGame.get(r.gameId) ?? []), r]);
+  for (const lines of byGame.values()) {
+    for (const r of lines) {
+      r.place = 1 + lines.filter((o) => o.result > r.result).length;
+      r.field = lines.length;
+    }
+  }
+  return rows;
 }
 
-export function ranking(year: string | null, includeArchived = false): Ranking {
-  const all = results(year);
+export function ranking(from: string | null, includeArchived = false): Ranking {
+  const all = results(from);
 
   // A win = the single best result of a game (ties share it), and only if it is a profit.
   const topByGame = new Map<number, number>();
@@ -65,10 +81,7 @@ export function ranking(year: string | null, includeArchived = false): Ranking {
   }
   for (const row of rows.values()) row.avg = Math.round(row.net / row.games);
 
-  const years = (db.prepare(`SELECT DISTINCT substr(started_at, 1, 4) AS y FROM games WHERE status = 'closed' ORDER BY y DESC`).all() as { y: string }[]).map((r) => r.y);
-
   return {
-    years,
     rows: [...rows.values()].sort((a, b) => b.net - a.net || b.avg - a.avg || a.name.localeCompare(b.name)),
   };
 }
@@ -79,5 +92,17 @@ export function playerDetail(id: number): PlayerDetail {
   const games = results(null)
     .filter((r) => r.playerId === id)
     .map(({ playerId: _, name: __, archived: ___, ...g }) => g);
-  return { id: p.id, name: p.name, ...(p.archived ? { archived: true } : {}), stats: ranking(null, true).rows.find((r) => r.playerId === id) ?? null, games };
+  // Closed group games since this player's first one: how often they show up.
+  const first = games.at(-1)?.startedAt;
+  const total = first
+    ? (db.prepare(`SELECT COUNT(*) AS n FROM games WHERE status = 'closed' AND started_at >= ?`).get(first) as { n: number }).n
+    : 0;
+  return {
+    id: p.id,
+    name: p.name,
+    ...(p.archived ? { archived: true } : {}),
+    stats: ranking(null, true).rows.find((r) => r.playerId === id) ?? null,
+    games,
+    attendance: { played: games.length, total },
+  };
 }
